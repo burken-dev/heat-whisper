@@ -28,8 +28,11 @@ Reference (`reference-project/`, NibePi Node.js) used only for protocol + `model
 - Decode LE per reference (`addr = buf[i+1]*256+buf[i]`, value LE per size, signed adjust, `/factor`, optional `map` lookup, min/max corrupt guard → drop + fault log). Key MVP registers: 40004 BT1, 40008 BT2 S1, 40012 BT3 ret, 40013/40014 HW top/load, 43136 compressor actual, 43005 degree-minutes R/W, RMU 1xxxx (10001 alarm, 10020 lux R/W).
 - `sensor.py` ← `mode R`; `number.py` ← `R/W` with clamp (`value*factor` vs min/max).
 
-## 4. Entities & network
-- Entities generated from table; no per-register YAML. HA Native API + MQTT (discovery on, `nibe/<addr>` + `/json`, `/raw`).
+## 4. Entities & network (anti-spam defaults)
+- HA Native API primary (`api:` on). MQTT opt-in only (configured → enabled); HA users generate zero broker traffic.
+- Allowlist: COMMON table defines *available* registers; entities generated only for curated default (~10: BT1/BT2/BT3, HW top/load, compressor freq, DM, setpoint/offset/mode) + user `registers: [...]` opt-ins. No entity = no messages on either transport.
+- Publish on change: `filters:` per sensor (`delta: 0.1` temps, `throttle: 60s`, `heartbeat: 5min`). Pump polls every seconds; HA/broker see updates only on movement or heartbeat.
+- If MQTT on: single state topic per entity (`nibe/<addr>/state`), QoS 0, `retain: false`; discovery only for allowlisted entities. No `/json`+`/raw` triple (reference `index.js:1141-1143` pattern explicitly rejected); `debug_mqtt: true` re-enables them.
 - `packages/base.yaml`: Wi-Fi fallback AP + captive portal, `web_server` diagnostics, logger kept off UART pins.
 - Writes: number/set → clamp → `WriteRequest` → next `0x6B` slot; ACK surfaced as state.
 
