@@ -32,7 +32,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
       uint8_t o[10] = {0xC0, 0x6B, 0x06, (uint8_t)(w.addr & 0xFF), (uint8_t)(w.addr >> 8),
                        (uint8_t)(w.raw & 0xFF), (uint8_t)((w.raw >> 8) & 0xFF),
                        (uint8_t)((w.raw >> 16) & 0xFF), (uint8_t)((w.raw >> 24) & 0xFF), 0};
-      o[9] = calc_crc(o);
+      o[9] = calc_crc_c0(o);
       write_array(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x6D) {
