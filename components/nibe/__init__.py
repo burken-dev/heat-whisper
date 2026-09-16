@@ -5,7 +5,7 @@ from esphome.components import uart
 from .registers import generate_header, DEFAULT_ALLOWLIST
 CODEOWNERS = ["@andreas"]
 nibe_ns = cg.esphome_ns.namespace("nibe")
-Nibe = nibe_ns.class_("NibeComponent", cg.Component, cg.uart.UARTDevice)
+Nibe = nibe_ns.class_("NibeComponent", cg.Component, uart.UARTDevice)
 CONF_REGISTERS = "registers"
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(Nibe),
@@ -16,7 +16,7 @@ CONFIG_SCHEMA = cv.Schema({
 async def to_code(config):
     var = cg.new_Pvariable(config[cv.GenerateID()])
     await cg.register_component(var, config)
-    await cg.uart.register_uart_device(var, config)
+    await uart.register_uart_device(var, config)
     cg.add(var.set_slave_address(config["slave_address"]))
     cg.add(var.set_passive(config["passive"]))
     cg.add(var.set_poll_registers(config[CONF_REGISTERS]))
