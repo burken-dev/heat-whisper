@@ -1,3 +1,4 @@
+# Pico W: ESP Web Tools is ESP-only — flash firmware.uf2 manually via USB mass-storage.
 rp2040:
   board: rpipicow
 uart:

@@ -20,7 +20,14 @@ jobs:
       - run: esphome compile nibe_esp32.yaml
       - run: esphome compile nibe_pico_w.yaml
       - uses: actions/upload-artifact@v4
-        with: { name: firmware, path: "**/*.bin" }
+        with:
+          name: firmware
+          path: |
+            .esphome/build/nibe-bridge/build/firmware.factory.bin
+            .esphome/build/nibe-bridge/build/firmware.ota.bin
+            .esphome/build/nibe-bridge-pico/.pioenvs/nibe-bridge-pico/firmware.bin
+            .esphome/build/nibe-bridge-pico/.pioenvs/nibe-bridge-pico/firmware.uf2
+          if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest

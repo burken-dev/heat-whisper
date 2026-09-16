@@ -1,6 +1,7 @@
 // components/nibe/nibe.h
 #pragma once
 #include "esphome/core/component.h"
+#include "esphome/core/log.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/number/number.h"
@@ -41,7 +42,11 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   void set_flow_control_pin(esphome::GPIOPin *p) { flow_pin_ = p; }
   void setup() override;
   void set_poll_registers(const std::vector<uint16_t> &addrs);
-  void queue_write(uint16_t addr, int32_t raw) { writes_.push({addr, raw}); }
+  void queue_write(uint16_t addr, int32_t raw) {
+    if (addr < 20000) { ESP_LOGW("nibe", "Dropping RMU-range write addr %u", addr); return; }
+    if (writes_.size() >= 4) { ESP_LOGW("nibe", "Write queue full, dropping oldest"); writes_.pop(); }
+    writes_.push({addr, raw});
+  }
   void add_sensor(NibeSensor *s) { sensors_.push_back(s); }
   void add_number(NibeNumber *n) { numbers_.push_back(n); }
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)

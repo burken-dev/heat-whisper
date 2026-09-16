@@ -23,6 +23,8 @@ nibe:
   # (DEFAULT_ALLOWLIST in components/nibe/registers.py). To poll extra
   # model-specific registers, list them here, e.g.:
   # registers: [40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 40018]
+  # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
+  # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
   # Polling alone creates NO entity — HA entities come only from the
   # sensor:/number: entries below (allowlist + your opt-ins, nothing else).
 

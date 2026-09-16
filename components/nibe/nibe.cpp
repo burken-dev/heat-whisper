@@ -22,27 +22,38 @@ void NibeComponent::tx_(const uint8_t *d, size_t len) {
 void NibeComponent::loop() {
   uint8_t b;
   while (available()) { read_byte(&b); rx_.push_back(b); }
+  if (rx_.size() > 512) rx_.erase(rx_.begin(), rx_.begin() + (rx_.size() - 512));
   for (;;) {
+    if (rx_.size() >= 2 && rx_[0] == 0x06 && rx_[1] == 0x5C) rx_.erase(rx_.begin());
     auto it = std::find(rx_.begin(), rx_.end(), 0x5C);
     if (it == rx_.end()) { rx_.clear(); return; }
     if (it != rx_.begin()) rx_.erase(rx_.begin(), it);
     if (rx_.size() < 5) return;
     uint8_t len = rx_[4];
+    if (len > 64) { rx_.erase(rx_.begin()); continue; }
     if (rx_.size() < (size_t) len + 6) return;
-    if (calc_crc(rx_.data()) != rx_[len + 5]) {
+    std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
+    if (calc_crc(f.data()) != f[len + 5]) {
       send_nack_();
       rx_.erase(rx_.begin());
       continue;
     }
-    std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
     rx_.erase(rx_.begin(), rx_.begin() + len + 6);
+    for (size_t i = 5; i + 1 < f.size() - 1;) {  // ponytail: 5C 5C escape, backend.js:169-184
+      if (f[i] == 0x5C && f[i + 1] == 0x5C) { f.erase(f.begin() + i); f[4]--; continue; }
+      i++;
+    }
+    if (f.size() != (size_t) f[4] + 6) { send_nack_(); continue; }
+    uint8_t c = 0;
+    for (size_t i = 2; i < (size_t) f[4] + 5; i++) c ^= f[i];
+    f[f[4] + 5] = c;
     on_frame_(f.data(), f.size());
   }
 }
 void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
-    if (!reads_.empty()) { auto r = reads_.front(); reads_.pop(); tx_(r.data(), r.size()); }
+    if (!reads_.empty()) { auto r = reads_.front(); reads_.pop(); reads_.push(r); tx_(r.data(), r.size()); }
     else send_ack_();
   } else if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     if (passive_) return;
@@ -54,7 +65,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
       o[9] = calc_crc_c0(o);
       tx_(o, 10);
     } else send_ack_();
-  } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x6D) {
+  } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
     if (f[3] == 0x6D) {
       if (n > 9) {  // model bytes at f[8..n-2] (matches index.js announcement slice)
         model_.assign((const char *) (f + 8), n - 9);
@@ -115,10 +126,6 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     if (f[3] == 0x60) {
       if (passive_) return;
       send_ack_();  // ponytail: no RMU queue in MVP, ACK keeps pump happy
-      return;
-    }
-    if (f[3] == 0x62) {
-      if (!passive_) send_ack_();
       return;
     }
     if (f[3] == 0x63) {
