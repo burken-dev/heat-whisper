@@ -42,9 +42,19 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     if (f[3] == 0x6D) {
       if (n > 9) {  // model bytes at f[8..n-2] (matches index.js announcement slice)
         model_.assign((const char *) (f + 8), n - 9);
-        auto cut = model_.find_first_of(" -");
+        auto sp = model_.find(' ');
+        if (sp != std::string::npos) {
+          std::string first = model_.substr(0, sp);
+          if (first == "VVM" || first == "SMO" || first == "Tehowatti" || first == "STAR") {
+            auto sp2 = model_.find(' ', sp + 1);
+            std::string second = model_.substr(sp + 1, sp2 == std::string::npos ? sp2 : sp2 - sp - 1);
+            model_ = second.empty() ? first : first + second;
+          } else {
+            model_.erase(sp);
+          }
+        }
+        auto cut = model_.find_first_of("-,");
         if (cut != std::string::npos) model_.erase(cut);
-        // ponytail: VVM/SMO multi-word names keep first token only
       }
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
