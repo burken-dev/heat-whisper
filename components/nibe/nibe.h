@@ -3,13 +3,19 @@
 #include "esphome/core/component.h"
 #include "esphome/components/uart/uart.h"
 #include <queue>
+#include <string>
 #include <vector>
+// ponytail: must match SIZE_CODES in registers.py
+enum NibeSize : uint8_t { NIBE_U8 = 0, NIBE_S8, NIBE_U16, NIBE_S16, NIBE_U32, NIBE_S32 };
 struct WriteRequest { uint16_t addr; int32_t raw; };
 class NibeComponent : public esphome::Component, public esphome::uart::UARTDevice {
  public:
   void set_slave_address(uint8_t a) { slave_ = a; }
   void set_passive(bool p) { passive_ = p; }
+  void set_poll_registers(const std::vector<uint16_t> &addrs);
   void queue_write(uint16_t addr, int32_t raw) { writes_.push({addr, raw}); }
+  virtual void on_value(uint16_t addr, float v) {}  // publish hook for Task 5
+  const std::string &get_model() const { return model_; }
   void loop() override;
   // calc_crc: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].
   static uint8_t calc_crc(const uint8_t *d) {
@@ -29,6 +35,7 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   void send_nack_() { uint8_t b = 0x15; write_array(&b, 1); }
   uint8_t slave_{0x19};
   bool passive_{false};
+  std::string model_;
   std::vector<uint8_t> rx_;
   std::queue<WriteRequest> writes_;
   std::queue<std::vector<uint8_t>> reads_;

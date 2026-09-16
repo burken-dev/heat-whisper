@@ -16,6 +16,9 @@ async def to_code(config):
     var = cg.new_Pvariable(config[cv.GenerateID()])
     await cg.register_component(var, config)
     await cg.uart.register_uart_device(var, config)
+    cg.add(var.set_slave_address(config["slave_address"]))
+    cg.add(var.set_passive(config["passive"]))
+    cg.add(var.set_poll_registers(config[CONF_REGISTERS]))
     models = {}
     mdir = os.path.join(os.path.dirname(__file__), "..", "..", "reference-project", "models")
     for f in sorted(os.listdir(mdir)):
