@@ -1,6 +1,6 @@
 # tests/test_registers.py
 import json, os
-from components.nibe.registers import common_and_deltas
+from components.nibe.registers import common_and_deltas, generate_header
 def test_common_contains_bt1():
     models = {
         "F750": [{"register": "40004", "factor": 10, "size": "s16", "mode": "R"}],
@@ -23,3 +23,28 @@ def test_common_allowlist_seeded_real_models():
     common, _ = common_and_deltas(models)
     assert "40004" in common
     assert len(common) >= 5
+
+
+def test_merge_prefers_nonzero_minmax():
+    # first-wins would lock in 0/0 (corrupt filter off, number clamp open)
+    models = {
+        "A": [{"register": "43005", "factor": 10, "size": "s16",
+               "mode": "R/W", "min": "0", "max": "0"}],
+        "B": [{"register": "43005", "factor": 10, "size": "s16",
+               "mode": "R/W", "min": "-30000", "max": "30000"}],
+    }
+    hdr = generate_header(models)
+    entry = hdr[hdr.index("{43005,"):hdr.index("{43005,") + 80]
+    assert "-30000" in entry and "30000" in entry
+
+
+def test_real_43005_resolves_nonzero_minmax():
+    mdir = os.path.join(os.path.dirname(__file__), "..", "reference-project", "models")
+    models = {}
+    for f in sorted(os.listdir(mdir)):
+        if f.endswith(".json"):
+            with open(os.path.join(mdir, f)) as fh:
+                models[f[:-5]] = json.load(fh)
+    hdr = generate_header(models)
+    entry = hdr[hdr.index("{43005,"):hdr.index("{43005,") + 80]
+    assert "-30000" in entry and "30000" in entry

@@ -2,6 +2,7 @@
 #include "nibe.h"
 #include "registers.h"
 #include <algorithm>
+#include <cmath>
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
 void NibeComponent::loop() {
   uint8_t b;
@@ -104,4 +105,30 @@ void NibeComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
     o[5] = calc_crc_c0(o);
     reads_.emplace(o, o + 6);
   }
+}
+void NibeComponent::on_value(uint16_t addr, float v) {
+  for (auto *s : sensors_)
+    if (s->get_register() == addr) s->publish_value(v);
+  for (auto *n : numbers_)
+    if (n->get_register() == addr) n->publish_value(v);
+}
+void NibeNumber::control(float value) {
+  if (parent_ == nullptr) return;
+  float v = value;
+  int32_t raw;
+  const NibeReg *reg = nullptr;
+  for (uint16_t k = 0; k < NIBE_COMMON_N; k++)  // ponytail: linear scan, table is ~10 entries
+    if (NIBE_COMMON[k].addr == addr_) { reg = &NIBE_COMMON[k]; break; }
+  if (reg != nullptr && reg->factor) {
+    raw = (int32_t) std::lround(v * reg->factor);
+    if (reg->min != 0 || reg->max != 0) {  // clamp to merged R/W range
+      if (raw < reg->min) raw = reg->min;
+      if (raw > reg->max) raw = reg->max;
+      v = (float) raw / reg->factor;
+    }
+  } else {
+    raw = (int32_t) std::lround(v);  // unknown register: factor 1
+  }
+  parent_->queue_write(addr_, raw);
+  publish_state(v);
 }

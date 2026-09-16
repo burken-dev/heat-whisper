@@ -1,6 +1,7 @@
 # components/nibe/__init__.py
 import os, json, esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome.components import uart
 from .registers import generate_header, DEFAULT_ALLOWLIST
 CODEOWNERS = ["@andreas"]
 nibe_ns = cg.esphome_ns.namespace("nibe")
@@ -11,7 +12,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional("slave_address", default=0x19): cv.hex_int,
     cv.Optional(CONF_REGISTERS, default=list(DEFAULT_ALLOWLIST)): cv.ensure_list(cv.int_),
     cv.Optional("passive", default=False): cv.boolean,
-})
+}).extend(uart.UART_DEVICE_SCHEMA)  # provides uart_id (register_uart_device needs it)
 async def to_code(config):
     var = cg.new_Pvariable(config[cv.GenerateID()])
     await cg.register_component(var, config)

@@ -10,3 +10,119 @@ web_server:
 api:
 logger:
   baud_rate: 0
+
+# Nibe heat-pump bridge. Native API is primary; MQTT is opt-in only (see bottom).
+nibe:
+  id: nibe_bridge
+  uart_id: nibe_uart
+  # registers: polled register ids. Default is the 10-reg allowlist
+  # (DEFAULT_ALLOWLIST in components/nibe/registers.py). To poll extra
+  # model-specific registers, list them here, e.g.:
+  # registers: [40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 40018]
+  # Polling alone creates NO entity — HA entities come only from the
+  # sensor:/number: entries below (allowlist + your opt-ins, nothing else).
+
+sensor:
+  # Anti-spam contract (§4): every entity carries delta/throttle/heartbeat so
+  # the pump's broadcast storm stays off the network. Copy this filter block
+  # onto any register you add.
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 40004
+    name: "BT1 Outdoor"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 40008
+    name: "Supply Temp S1"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 40012
+    name: "Return Temp"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 40013
+    name: "Hot Water Top BT7"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 40014
+    name: "Hot Water BT6"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 43009
+    name: "Calculated Supply"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 43136
+    name: "Compressor Frequency"
+    unit_of_measurement: "Hz"
+    accuracy_decimals: 1
+    filters:
+      - delta: 0.1
+      - throttle: 60s
+      - heartbeat: 5min
+  # Opt-in example (allowlisted + polled, no default entity — uncomment to add):
+  # - platform: nibe
+  #   nibe_id: nibe_bridge
+  #   register: 10001
+  #   name: "Alarm"
+  #   accuracy_decimals: 0
+  #   filters:
+  #     - delta: 0.1
+  #     - throttle: 60s
+  #     - heartbeat: 5min
+
+number:
+  # Writable registers: HA traits (min/max/step, scaled units) + firmware
+  # clamps raw writes to the merged NIBE_COMMON min/max before queue_write.
+  - platform: nibe
+    nibe_id: nibe_bridge
+    register: 43005
+    name: "Degree Minutes"
+    min_value: -3000
+    max_value: 3000
+    step: 10
+
+# MQTT opt-in (OFF by default). Add a broker block and each entity above
+# publishes to its single native state topic (<node>/sensor/<name>/state)
+# automatically — no extra config, and never the reference bridge's
+# /json + /raw triple-topic spam.
+# mqtt:
+#   broker: !secret mqtt_broker
+#   username: !secret mqtt_user
+#   password: !secret mqtt_password

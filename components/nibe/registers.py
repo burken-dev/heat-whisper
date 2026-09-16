@@ -9,11 +9,25 @@ def _num(x):
         return 0
 
 
-def common_and_deltas(models: dict):
+def _has_range(r):
+    return _num(r.get("min", 0)) != 0 or _num(r.get("max", 0)) != 0
+
+
+def _by_reg(models: dict):
+    # ponytail: prefer entries with nonzero min/max so shared R/W regs keep
+    # their clamp range (first-wins could lock in 0/0 and disable the corrupt
+    # filter + number clamp); first nonzero wins, later ones kept as-is.
     by_reg = {}
     for regs in models.values():
         for r in regs:
-            by_reg.setdefault(r["register"], r)
+            prev = by_reg.get(r["register"])
+            if prev is None or (not _has_range(prev) and _has_range(r)):
+                by_reg[r["register"]] = r
+    return by_reg
+
+
+def common_and_deltas(models: dict):
+    by_reg = _by_reg(models)
     # ponytail: allowlist-seeded, not intersection (register sets differ per model)
     common, seen = [], set()
     for a in DEFAULT_ALLOWLIST:
@@ -28,10 +42,7 @@ def common_and_deltas(models: dict):
 
 def generate_header(models: dict) -> str:
     common, deltas = common_and_deltas(models)
-    by_reg = {}
-    for regs in models.values():
-        for r in regs:
-            by_reg.setdefault(r["register"], r)
+    by_reg = _by_reg(models)
     lines = ["#pragma once", "#include <stdint.h>",
              "struct NibeReg { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };"]
     entries = ",".join(
