@@ -1,3 +1,4 @@
+# cp secrets.yaml.example secrets.yaml at repo root on first use
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password

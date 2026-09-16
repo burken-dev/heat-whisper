@@ -1,2 +1,3 @@
 reference-project/
 .worktrees/
+secrets.yaml

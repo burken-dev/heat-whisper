@@ -1,3 +1,6 @@
+esphome:
+  name: nibe-bridge
+  friendly_name: Nibe Bridge
 packages:
   base: !include packages/base.yaml
   hw: !include packages/esp32_base.yaml

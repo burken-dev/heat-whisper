@@ -13,6 +13,7 @@ jobs:
     needs: host-tests
     steps:
       - uses: actions/checkout@v4
+      - run: cp secrets.yaml.example secrets.yaml
       - run: pip install esphome
       - run: esphome config nibe_esp32.yaml
       - run: esphome config nibe_pico_w.yaml
