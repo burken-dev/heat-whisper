@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+namespace esphome {
+namespace nibe {
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
 void NibeComponent::setup() {
   if (flow_pin_ != nullptr) {
@@ -173,3 +175,5 @@ void NibeNumber::control(float value) {
   parent_->queue_write(addr_, raw);
   publish_state(v);
 }
+}  // namespace nibe
+}  // namespace esphome

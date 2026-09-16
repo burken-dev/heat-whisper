@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 // ponytail: must match SIZE_CODES in registers.py
+namespace esphome {
+namespace nibe {
 enum NibeSize : uint8_t { NIBE_U8 = 0, NIBE_S8, NIBE_U16, NIBE_S16, NIBE_U32, NIBE_S32 };
 struct WriteRequest { uint16_t addr; int32_t raw; };
 class NibeComponent;  // entities hold a parent pointer only
@@ -72,3 +74,5 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   std::vector<NibeSensor *> sensors_;
   std::vector<NibeNumber *> numbers_;
 };
+}  // namespace nibe
+}  // namespace esphome
