@@ -1,0 +1,7 @@
+{
+  "name": "Nibe Bridge",
+  "version": "0.1.0",
+  "builds": [
+    { "chipFamily": "ESP32", "parts": [{ "path": "nibe_esp32.bin", "offset": 0 }] }
+  ]
+}

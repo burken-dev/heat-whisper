@@ -1,0 +1,6 @@
+reference-project/
+.worktrees/
+secrets.yaml
+.esphome/
+__pycache__/
+components/nibe/registers.h

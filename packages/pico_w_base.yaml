@@ -1,0 +1,11 @@
+# Pico W: ESP Web Tools is ESP-only — flash firmware.uf2 manually via USB mass-storage.
+rp2040:
+  board: rpipicow
+uart:
+  id: nibe_uart
+  tx_pin: GPIO4
+  rx_pin: GPIO5
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
