@@ -16,6 +16,9 @@ logger:
 nibe:
   id: nibe_bridge
   uart_id: nibe_uart
+  # Bring-up order: flash with passive: true first, confirm decode in
+  # logs/web_server, then enable TX (passive: false).
+  # passive: true
   # registers: polled register ids. Default is the 10-reg allowlist
   # (DEFAULT_ALLOWLIST in components/nibe/registers.py). To poll extra
   # model-specific registers, list them here, e.g.:

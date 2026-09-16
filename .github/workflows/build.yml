@@ -19,3 +19,15 @@ jobs:
       - run: esphome config nibe_pico_w.yaml
       - run: esphome compile nibe_esp32.yaml
       - run: esphome compile nibe_pico_w.yaml
+      - uses: actions/upload-artifact@v4
+        with: { name: firmware, path: "**/*.bin" }
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: compile
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: firmware, path: dist }
+      - uses: softprops/action-gh-release@v2
+        with: { files: dist/** }

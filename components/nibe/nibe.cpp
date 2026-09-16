@@ -3,7 +3,20 @@
 #include "registers.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
+void NibeComponent::setup() {
+  if (flow_pin_ != nullptr) {
+    flow_pin_->setup();
+    flow_pin_->digital_write(false);
+  }
+}
+void NibeComponent::tx_(const uint8_t *d, size_t len) {
+  if (flow_pin_ != nullptr) flow_pin_->digital_write(true);
+  write_array(d, len);
+  flush();
+  if (flow_pin_ != nullptr) flow_pin_->digital_write(false);
+}
 void NibeComponent::loop() {
   uint8_t b;
   while (available()) { read_byte(&b); rx_.push_back(b); }
@@ -27,7 +40,7 @@ void NibeComponent::loop() {
 void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
-    if (!reads_.empty()) { auto r = reads_.front(); reads_.pop(); write_array(r.data(), r.size()); }
+    if (!reads_.empty()) { auto r = reads_.front(); reads_.pop(); tx_(r.data(), r.size()); }
     else send_ack_();
   } else if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     if (passive_) return;
@@ -37,7 +50,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
                        (uint8_t)(w.raw & 0xFF), (uint8_t)((w.raw >> 8) & 0xFF),
                        (uint8_t)((w.raw >> 16) & 0xFF), (uint8_t)((w.raw >> 24) & 0xFF), 0};
       o[9] = calc_crc_c0(o);
-      write_array(o, 10);
+      tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x6D) {
     if (f[3] == 0x6D) {
@@ -93,6 +106,34 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
           continue;
         on_value(addr, v);  // ponytail: enum maps publish numeric; strings in Task 5
       }
+    }
+    if (!passive_) send_ack_();
+  } else if (f[2] >= 0x19 && f[2] <= 0x1C) {
+    // RMU slots (cf. reference-project/backend.js:232-305). TX only here; passive decodes silently.
+    if (f[3] == 0x60) {
+      if (passive_) return;
+      send_ack_();  // ponytail: no RMU queue in MVP, ACK keeps pump happy
+      return;
+    }
+    if (f[3] == 0x62) {
+      if (!passive_) send_ack_();
+      return;
+    }
+    if (f[3] == 0x63) {
+      if (passive_) return;
+      uint8_t r[6] = {0xC0, 0x60, 0x02, 0x63, 0x00, 0x00};
+      r[5] = calc_crc_c0(r);  // == 0xC1, matches backend.js:283
+      tx_(r, 6);
+      return;
+    }
+    if (f[3] == 0xEE) {
+      if (passive_) return;
+      const uint8_t ver[7] = {0xC0, 0xEE, 0x03, 0xEE, 0x03, 0x01, 0x00};
+      uint8_t r[7];
+      memcpy(r, ver, 7);
+      r[6] = calc_crc_c0(r);  // == 0xC1, matches backend.js:293
+      tx_(r, 7);
+      return;
     }
     if (!passive_) send_ack_();
   } else {

@@ -1,6 +1,7 @@
 # components/nibe/__init__.py
 import os, json, esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome import pins
 from esphome.components import uart
 from .registers import generate_header, DEFAULT_ALLOWLIST
 CODEOWNERS = ["@andreas"]
@@ -12,6 +13,7 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional("slave_address", default=0x19): cv.hex_int,
     cv.Optional(CONF_REGISTERS, default=list(DEFAULT_ALLOWLIST)): cv.ensure_list(cv.int_),
     cv.Optional("passive", default=False): cv.boolean,
+    cv.Optional("flow_control_pin"): pins.gpio_output_pin_schema,
 }).extend(uart.UART_DEVICE_SCHEMA)  # provides uart_id (register_uart_device needs it)
 async def to_code(config):
     var = cg.new_Pvariable(config[cv.GenerateID()])
@@ -19,6 +21,9 @@ async def to_code(config):
     await uart.register_uart_device(var, config)
     cg.add(var.set_slave_address(config["slave_address"]))
     cg.add(var.set_passive(config["passive"]))
+    if "flow_control_pin" in config:
+        pin = await cg.gpio_pin_expression(config["flow_control_pin"])
+        cg.add(var.set_flow_control_pin(pin))
     cg.add(var.set_poll_registers(config[CONF_REGISTERS]))
     models = {}
     mdir = os.path.join(os.path.dirname(__file__), "..", "..", "reference-project", "models")

@@ -33,9 +33,11 @@ class NibeNumber : public esphome::number::Number, public esphome::Component {
   uint16_t addr_{0};
 };
 class NibeComponent : public esphome::Component, public esphome::uart::UARTDevice {
- public:
+  public:
   void set_slave_address(uint8_t a) { slave_ = a; }
   void set_passive(bool p) { passive_ = p; }
+  void set_flow_control_pin(esphome::GPIOPin *p) { flow_pin_ = p; }
+  void setup() override;
   void set_poll_registers(const std::vector<uint16_t> &addrs);
   void queue_write(uint16_t addr, int32_t raw) { writes_.push({addr, raw}); }
   void add_sensor(NibeSensor *s) { sensors_.push_back(s); }
@@ -57,10 +59,12 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   }
  protected:
   void on_frame_(const uint8_t *f, uint8_t n);
-  void send_ack_() { uint8_t b = 0x06; write_array(&b, 1); }
-  void send_nack_() { uint8_t b = 0x15; write_array(&b, 1); }
+  void tx_(const uint8_t *d, size_t len);
+  void send_ack_() { uint8_t b = 0x06; tx_(&b, 1); }
+  void send_nack_() { uint8_t b = 0x15; tx_(&b, 1); }
   uint8_t slave_{0x19};
   bool passive_{false};
+  esphome::GPIOPin *flow_pin_{nullptr};
   std::string model_;
   std::vector<uint8_t> rx_;
   std::queue<WriteRequest> writes_;
