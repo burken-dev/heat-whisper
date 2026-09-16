@@ -26,7 +26,7 @@ async def to_code(config):
         cg.add(var.set_flow_control_pin(pin))
     cg.add(var.set_poll_registers(config[CONF_REGISTERS]))
     models = {}
-    mdir = os.path.join(os.path.dirname(__file__), "..", "..", "reference-project", "models")
+    mdir = os.path.join(os.path.dirname(__file__), "models")  # ponytail: vendored MIT maps, see models/LICENSE
     for f in sorted(os.listdir(mdir)):
         if f.endswith(".json"):
             with open(os.path.join(mdir, f)) as fh:

@@ -14,7 +14,7 @@ def test_common_contains_bt1():
 
 
 def test_common_allowlist_seeded_real_models():
-    mdir = os.path.join(os.path.dirname(__file__), "..", "reference-project", "models")
+    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "models")
     models = {}
     for f in sorted(os.listdir(mdir)):
         if f.endswith(".json"):
@@ -39,7 +39,7 @@ def test_merge_prefers_nonzero_minmax():
 
 
 def test_real_43005_resolves_nonzero_minmax():
-    mdir = os.path.join(os.path.dirname(__file__), "..", "reference-project", "models")
+    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "models")
     models = {}
     for f in sorted(os.listdir(mdir)):
         if f.endswith(".json"):
