@@ -1,0 +1,7 @@
+packages:
+  base: !include packages/base.yaml
+  hw: !include packages/pico_w_base.yaml
+external_components:
+  - source:
+      type: local
+      path: components
