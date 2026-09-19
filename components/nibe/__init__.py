@@ -5,7 +5,7 @@ from esphome import pins
 from esphome.components import uart, web_server_base
 from .registers import generate_header, generate_catalog_header, load_hints, DEFAULT_ALLOWLIST, MAX_SELECTION
 CODEOWNERS = ["@andreas"]
-AUTO_LOAD = ["select", "web_server_base"]  # boot factory news NibeSelect entities; no YAML select platform required
+AUTO_LOAD = ["sensor", "number", "switch", "select", "web_server_base"]  # boot factory news entities; no YAML platforms required
 nibe_ns = cg.esphome_ns.namespace("nibe")
 Nibe = nibe_ns.class_("NibeComponent", cg.Component, uart.UARTDevice)
 NibePickerHandler = nibe_ns.class_("NibePickerHandler", cg.Component)
