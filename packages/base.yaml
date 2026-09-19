@@ -37,6 +37,10 @@ heatwhisper:
   # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
   # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
+  # Modbus-RTU mode (non-Nibe, or Nibe via MODBUS40 accessory):
+  #   protocol: modbus_rtu
+  #   model: F750        # required in modbus mode (Nibe maps double as MODBUS40 maps)
+  #   modbus_address: 1  # peer address (MODBUS40 default 1)
 
 text_sensor:
   # Autodetected from the pump's 0x6D announcement (empty = not heard yet).

@@ -604,7 +604,7 @@ L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||Stri
 .map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+
 ' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
 fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
-N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model;render();});
+N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model+' ('+(j.proto||'nibe')+')';render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
@@ -707,6 +707,24 @@ std::string HeatWhisperPickerHandler::list_json_() const {
     o += "\",\"en\":";
     o += en ? '1' : '0';
     o += '}';
+  }
+  // ponytail: everything above is byte-identical to the Nibe path; union suffix only.
+  // Active proto is the configured mode; per-model proto from HW_TRANSPORTS membership
+  // (Nibe maps double as MODBUS40 maps, same register numbers). In modbus mode the
+  // addrs above already narrow to the configured model_ via the same lookup.
+  o += "],\"proto\":\"";
+  o += this->parent_->is_modbus() ? "modbus" : "nibe";
+  o += "\",\"models\":[";
+  for (uint8_t m = 0; m < HW_MODELS_N; m++) {
+    bool modbus_capable = false;
+    for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++)
+      if (HW_TRANSPORTS[t].model_idx == m) { modbus_capable = true; break; }
+    if (m) o += ',';
+    o += "{\"m\":\"";
+    picker_esc_(o, HW_MODELS[m].name);
+    o += "\",\"proto\":\"";
+    o += modbus_capable ? "modbus" : "nibe";
+    o += "\"}";
   }
   o += "]}";
   return o;

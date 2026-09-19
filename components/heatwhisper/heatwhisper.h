@@ -100,6 +100,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
+  bool is_modbus() const { return modbus_; }
   void loop() override;
   static uint16_t crc16_modbus(const uint8_t *d, size_t n);
   // calc_crc_nibe: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].

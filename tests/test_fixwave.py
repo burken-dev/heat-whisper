@@ -35,6 +35,12 @@ def test_picker_escapes_titles_and_controls():
     assert "\\u%04X" in CPP
 
 
+def test_picker_model_union_with_proto():
+    body = CPP.split("HeatWhisperPickerHandler::list_json_")[1].split("HeatWhisperPickerHandler::handle_save_")[0]
+    assert '\\"proto\\"' in body and '\\"models\\"' in body
+    assert "HW_TRANSPORTS[t].model_idx" in body and "is_modbus()" in body
+
+
 def test_registers_emitter_gone():
     assert "generate_header" not in INIT
     assert "common_and_deltas" not in open(os.path.join(REPO, "components", "heatwhisper", "registers.py")).read()
