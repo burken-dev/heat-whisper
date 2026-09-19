@@ -38,7 +38,7 @@ editing YAML, recompiling, reflashing — too hostile for webflasher users.
    min/max/step from catalog factor/range.
 3. **NVS selection.** Enabled set (≤50 addrs + version) stored via ESPHome
    `Preferences`; survives reboot/OTA, no HA needed. Empty/corrupt NVS seeds
-   the current 19 defaults (factory set = today's entities).
+   the current 18 defaults (factory set = today's entities; 10001 Alarm in the allowlist has no entity and is excluded).
 4. **Boot-time entities.** `NibeComponent::setup()` reads NVS, drops unknown
    addrs with a warning, creates only enabled entities (new `NibeSelect` /
    switch classes alongside existing `NibeSensor`/`NibeNumber`), registers them
@@ -48,7 +48,7 @@ editing YAML, recompiling, reflashing — too hostile for webflasher users.
    `/nibe/registers` (inherits existing admin auth): GET returns detected
    model's registers with enabled flags (text filter + "enabled only" toggle);
    POST validates (known addr, ≤50, dedupe) → NVS commit → reboot-button to
-   apply. Model unknown → show 19 defaults with "waiting for pump announcement".
+   apply. Model unknown → show 18 defaults with "waiting for pump announcement".
    The 0x6D `model_` string is normalized (uppercase alphanumeric prefix) to
    match a `models/<NAME>.json` basename; no match → defaults list + notice.
 6. **Migration.** Delete static sensor/number/Enable-switch blocks from
@@ -68,7 +68,7 @@ editing YAML, recompiling, reflashing — too hostile for webflasher users.
 | Case | Behavior |
 |---|---|
 | Model not announced | Picker shows defaults + notice |
-| NVS corrupt/version mismatch | Fall back to 19 defaults + log warning |
+| NVS corrupt/version mismatch | Fall back to 18 defaults + log warning |
 | Saved addr gone from maps | Skipped at boot + warning |
 | POST >50 / unknown addr | 400 rejected, nothing written |
 | Pico W flash overflow | CI compile catches; per-model binary split is out-of-scope fallback |
