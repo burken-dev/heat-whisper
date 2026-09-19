@@ -39,6 +39,8 @@ def test_picker_model_union_with_proto():
     body = CPP.split("HeatWhisperPickerHandler::list_json_")[1].split("HeatWhisperPickerHandler::handle_save_")[0]
     assert '\\"proto\\"' in body and '\\"models\\"' in body
     assert "HW_TRANSPORTS[t].model_idx" in body and "is_modbus()" in body
+    assert '"modbus"' in body and '"nibe"' in body
+    assert "HW_MODELS[m].name" in body
 
 
 def test_registers_emitter_gone():
