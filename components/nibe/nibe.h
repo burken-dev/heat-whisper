@@ -6,6 +6,7 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/number/number.h"
 #include <queue>
+#include <set>
 #include <string>
 #include <vector>
 // ponytail: must match SIZE_CODES in registers.py
@@ -42,11 +43,19 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   void set_flow_control_pin(esphome::GPIOPin *p) { flow_pin_ = p; }
   void setup() override;
   void set_poll_registers(const std::vector<uint16_t> &addrs);
+  void set_register_enabled(uint16_t addr, bool enabled);
+  bool is_enabled(uint16_t addr) const;
+  void ensure_polled(uint16_t addr);
   void queue_write(uint16_t addr, int32_t raw) {
     if (addr < 20000) { ESP_LOGW("nibe", "Dropping RMU-range write addr %u", addr); return; }
     if (writes_.size() >= 4) { ESP_LOGW("nibe", "Write queue full, dropping oldest"); writes_.pop(); }
     writes_.push({addr, raw});
   }
+  void set_register_enabled(uint16_t addr, bool enabled) {
+    if (enabled) disabled_.erase(addr);
+    else disabled_.insert(addr);
+  }
+  bool is_enabled(uint16_t addr) const { return disabled_.count(addr) == 0; }
   void add_sensor(NibeSensor *s) { sensors_.push_back(s); }
   void add_number(NibeNumber *n) { numbers_.push_back(n); }
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
@@ -78,6 +87,7 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   std::queue<std::vector<uint8_t>> reads_;
   std::vector<NibeSensor *> sensors_;
   std::vector<NibeNumber *> numbers_;
+  std::set<uint16_t> disabled_;
 };
 }  // namespace nibe
 }  // namespace esphome
