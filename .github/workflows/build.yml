@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp secrets.yaml.example secrets.yaml
+      - run: |
+          KEY=$(python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())")
+          sed -i "s|^api_key: .*|api_key: \"$KEY\"|" secrets.yaml
       - run: pip install esphome
       - run: esphome config heatwhisper_esp32.yaml
       - run: esphome config heatwhisper_pico_w.yaml
