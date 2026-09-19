@@ -63,3 +63,10 @@ def test_on_boot_reasserts_toggles():
     boot = base.split("on_boot", 1)[1]
     for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
         assert f"set_register_enabled({reg}, id(en_{reg}).state)" in boot
+
+def test_smart_sensors_wired():
+    base = open("packages/base.yaml").read()
+    for reg in (40033, 43144, 43305):
+        assert f"register: {reg}" in base
+        assert f"set_register_enabled({reg}," in base
+        assert f"id(en_{reg}).state" in base
