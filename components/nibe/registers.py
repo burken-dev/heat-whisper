@@ -54,3 +54,12 @@ def generate_header(models: dict) -> str:
     lines.append(f"static const NibeReg NIBE_COMMON[] = {{{entries}}};")
     lines.append(f"static const uint16_t NIBE_COMMON_N = {len(common)};")
     return "\n".join(lines) + "\n"
+
+
+def is_known(addr: int, models: dict) -> bool:
+    want = str(addr)
+    for regs in models.values():
+        for r in regs:
+            if r.get("register") == want:
+                return True
+    return False
