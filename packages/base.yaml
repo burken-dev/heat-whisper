@@ -30,7 +30,7 @@ nibe:
   # Registers are now picked at runtime: open http://<node>/nibe/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
-  # previous 19 entities; stored in flash, survives OTA.
+  # previous 18 entities; stored in flash, survives OTA.
   # Bring-up order: flash with passive: true first, confirm decode in
   # logs/web_server, then enable TX (passive: false).
   # passive: true

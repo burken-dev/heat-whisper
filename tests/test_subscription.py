@@ -10,7 +10,6 @@ def test_enabled_set_api_present():
 
 def test_ensure_polled_present():
     assert "ensure_polled" in HDR
-import os
 REPO2 = os.path.join(os.path.dirname(__file__), "..")
 CPP = open(os.path.join(REPO2, "components", "nibe", "nibe.cpp")).read()
 
@@ -79,3 +78,11 @@ def test_factory_covers_old_entity_set():
     assert sorted(table) == sorted(OLD_ENTITY_REGS)
     assert sorted(table) == sorted(DEFAULT_ENABLED)
     assert len(set(table.values())) == len(table)
+    # ponytail: hardcoded snapshot of the 18 factory names; catches silent renames.
+    EXPECTED_BASE_NAMES = ["BT1 Outdoor", "Supply Temp S1", "Return Temp",
+        "Hot Water Top BT7", "Hot Water BT6", "Calculated Supply",
+        "Compressor Frequency", "Room Temp S1", "Compressor Energy Total",
+        "Compressor Energy HW", "Degree Minutes", "Heat Offset S1",
+        "Heat Curve S1", "Hot Water Comfort Mode", "Allow Heating",
+        "Allow Additive Heating", "Hot Water Production", "Hot Water Luxury Start Temp"]
+    assert sorted(table.values()) == sorted(EXPECTED_BASE_NAMES)
