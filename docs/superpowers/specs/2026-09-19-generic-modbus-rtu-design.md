@@ -37,7 +37,7 @@ duplicated entity logic).
 - New `protocol: nibe | modbus_rtu` option on the `nibe:` block (default
   `nibe`). Slave path (`on_frame_` tokens, RMU slots, announcement) is frozen
   and gated on `protocol == nibe`.
-- New master scheduler in `nibe.cpp`, active only in modbus mode: round-robin
+- New master scheduler in `heatpump.cpp` (see §10 rename), active only in
   over the enabled NVS selection + `extra_poll`, with response timeout, 3 retries
   then stale marking, and a write queue drained between polls.
 - Same UART/RS485 wiring; `flow_control_pin` reused for direction control.
@@ -71,14 +71,14 @@ Validator, `MAX_SELECTION` (50), hints (`entity_hints.json`), and the
 - Writes: `number`/`switch`/`select` control → clamp to catalog min/max →
   master write queue → FC06 or FC16 per model flag. RMU-range drop rule stays
   Nibe-mode-only.
-- Picker (`/nibe/registers`): model list becomes the union of Nibe + Modbus
+- Picker (`/heatpump/registers`, see §10 rename): model list becomes the union
   models; in modbus mode the list is filtered by the configured `model:` (no
   auto-detect) with a protocol tag per entry. Save/validate path unchanged.
 
 ## 6. Config
 
 ```yaml
-nibe:
+heatpump:
   protocol: modbus_rtu        # default: nibe
   model: Thermia_Calibra      # required in modbus_rtu mode
   modbus_address: 1           # Modbus slave id
@@ -126,3 +126,41 @@ LG PI485, Panasonic PAW-AW-MBS, Lambda, Midea. CTC: no public Modbus map found.
 - `esphome config` + `compile` both boards in CI (unchanged); passive
   bring-up procedure per brand (poll first, enable writes after decode
   confirmed).
+
+## 10. Brand-agnostic renaming (lands first, own commit)
+
+Rule: `nibe` stays if and only if it means Nibe-the-vendor, Nibe's proprietary
+protocol, or a Nibe model. Everything that means "arbitrary heat pump /
+bridge / register catalog" is renamed. The `protocol: nibe` value itself keeps
+its name — it *is* Nibe's proprietary protocol.
+
+| Area | Old | New |
+|---|---|---|
+| Component dir / files | `components/nibe/nibe.{h,cpp}` | `components/heatpump/heatpump.{h,cpp}` (`picker.h`, `sensor.py`, `number.py`, `registers.py`, `entity_hints.json`, `models/` move along) |
+| C++ namespace / classes | `esphome::nibe`, `NibeComponent`, `NibeSensor/Number/Select/Switch`, `NibePickerHandler`, `NibeSelection` | `esphome::heatpump`, `HeatpumpComponent`, `HeatpumpSensor/…`, `HeatpumpPickerHandler`, `HeatpumpSelection` |
+| Size enum / catalog structs | `NibeSize`/`NIBE_U8…`, `NibeMeta/Title/Model/Hint`, `NIBE_META…`, `NIBE_MODEL_<X>`, `NIBE_DEFAULTS…`, `NIBE_MAX_SELECTION` | `HpSize`/`HP_U8…`, `HpMeta/Title/Model/Hint`, `HP_META…`, `HP_MODEL_<X>`, `HP_DEFAULTS…`, `HP_MAX_SELECTION` |
+| Factory name table | `NIBE_BASE_NAMES` | `HP_FACTORY_NAMES` (contents kept verbatim for HA name continuity) |
+| Protocol helpers | `calc_crc`, `calc_crc_c0` | `calc_crc_nibe`, `calc_crc_c0_nibe` (new: `crc16_modbus`) |
+| Config key / ids | `nibe:`, `nibe_id`, `nibe_bridge`, `nibe_uart` | `heatpump:`, `heatpump_id`, `heatpump_bridge`, `heatpump_uart` |
+| Address config | `slave_address` (RMU slave meaning) | kept for nibe mode; modbus mode uses `modbus_address`; both map to one member `peer_addr_` |
+| Log tag | `"nibe"` | `"heatpump"` |
+| Picker | `/nibe/registers`, `NIBE_PICKER_HTML`, "Nibe register picker" | `/heatpump/registers`, `HP_PICKER_HTML`, "Heat pump register picker" |
+| Nodes / firmware | `nibe_esp32.yaml`, `nibe-bridge(-pico)`, "Nibe Bridge", AP `Nibe-Bridge` | `heatpump_esp32.yaml`, `heatpump-bridge(-pico)`, "Heat Pump Bridge", AP `Heatpump-Bridge` |
+| CI artifacts / flasher | `nibe_esp32.factory/ota.bin`, `manifest.json`, `index.html` strings | `heatpump_esp32.factory/ota.bin`, same files, renamed strings |
+| Tests | `components.nibe.*` imports, `components/nibe/…` paths, `NIBE_*` asserts, `nibe_id` cfgs, `NibeNumber::control` split anchor | same, renamed (`HP_*`, `HeatpumpNumber::control`, …) |
+
+Deliberately kept:
+
+- `models/*.json` filenames, contents, and vendor title strings (`"NIBE
+  Inverter …"`) — vendor data, not code naming.
+- NVS preference type id value `0x6E696273` (`'nibs'`): unchanged so saved
+  register selections survive OTA (symbol becomes `HP_SEL_TYPE` + comment).
+- `reference-project/`, old specs/plans under `docs/superpowers/`, git
+  history — historical, untouched. Repo rename (GitHub-level) out of scope.
+- Already-generic names (`queue_write`, `ensure_polled`, `on_value`,
+  `MAX_SELECTION`, `DEFAULT_ENABLED`) — no change.
+
+Migration (breaking, same pattern as the earlier `registers:` removal): users
+replace the `nibe:` block with `heatpump:` and re-flash; node rename changes
+the MQTT topic prefix, AP SSID, and picker URL but HA entity ids are stable
+(titles unchanged) and NVS selections carry over.
