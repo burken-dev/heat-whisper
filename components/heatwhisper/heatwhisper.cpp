@@ -234,7 +234,7 @@ uint16_t HeatWhisperComponent::crc16_modbus(const uint8_t *d, size_t n) {
 uint8_t HeatWhisperComponent::write_fc_for_model_() const {
   for (uint8_t i = 0; i < HW_TRANSPORTS_N; i++) {
     uint8_t mi = HW_TRANSPORTS[i].model_idx;
-    if (model_ == HW_MODELS[mi].name) return HW_TRANSPORTS[i].write_fc;
+    if (mi < HW_MODELS_N && model_ == HW_MODELS[mi].name) return HW_TRANSPORTS[i].write_fc;
   }
   return 6;
 }
@@ -511,6 +511,7 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
   for (uint16_t a : polled_)
     if (a == addr) { known = true; break; }
   if (!known) polled_.push_back(addr);
+  if (modbus_) return;
   uint8_t lo = addr & 0xFF, hi = addr >> 8;
   size_t laps = reads_.size();  // ponytail: queue has no iterators, rotate like on_frame_
   while (laps-- > 0) {

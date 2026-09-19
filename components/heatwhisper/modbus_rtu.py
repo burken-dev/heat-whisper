@@ -37,6 +37,7 @@ def parse_read_response(frame: bytes, fc: int, count: int) -> list:
     return [(frame[3 + 2 * i] << 8) | frame[4 + 2 * i] for i in range(count)]
 
 def decode_be(words: list, size: str, factor: int, word_order: str) -> float:
+    # u8/s8 single-word input is handled by the C++ mirror; this reference supports s16/u16/s32/u32.
     f = factor or 1
     if size in ("u16", "s16"):
         raw = words[0]
