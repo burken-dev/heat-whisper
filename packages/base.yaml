@@ -1,4 +1,16 @@
 # cp secrets.yaml.example secrets.yaml at repo root on first use
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: 'id(nibe_bridge).set_register_enabled(40004, id(en_40004).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(40008, id(en_40008).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(40012, id(en_40012).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(40013, id(en_40013).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(40014, id(en_40014).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(43009, id(en_43009).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(43136, id(en_43136).state);'
+      - lambda: 'id(nibe_bridge).set_register_enabled(43005, id(en_43005).state);'
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password

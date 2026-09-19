@@ -69,6 +69,8 @@ nibe:
   # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
 ```
 
+Migration: delete any existing `nibe: registers: [...]` key — entities auto-poll now; use `extra_poll:` only for entity-less sniffing.
+
 Add an entity (it auto-polls; copy its switch block too if you want a runtime toggle):
 
 ```yaml

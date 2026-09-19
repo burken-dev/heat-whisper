@@ -56,3 +56,10 @@ def test_base_yaml_switches_match_entities():
     for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
         assert f"set_register_enabled({reg}," in base
         assert "RESTORE_DEFAULT_ON" in base
+
+def test_on_boot_reasserts_toggles():
+    base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
+    assert "on_boot" in base
+    boot = base.split("on_boot", 1)[1]
+    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
+        assert f"set_register_enabled({reg}, id(en_{reg}).state)" in boot

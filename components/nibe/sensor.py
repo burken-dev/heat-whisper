@@ -1,7 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import sensor
-from esphome.core import EsphomeError
 import logging, os, json
 from . import Nibe, nibe_ns
 from .registers import is_known
