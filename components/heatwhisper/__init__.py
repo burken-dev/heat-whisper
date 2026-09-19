@@ -56,9 +56,10 @@ async def to_code(config):
             raise cv.Invalid("modbus_rtu protocol requires model: one of " + ", ".join(sorted(models)))
     cg.add(var.set_protocol_is_modbus(protocol == "modbus_rtu"))
     cg.add(var.set_peer_address(config["modbus_address"] if protocol == "modbus_rtu" else config["slave_address"]))
+    cg.add(var.set_model(config["model"]))
     catalog_out = os.path.join(os.path.dirname(__file__), "catalog.h")
     with open(catalog_out, "w") as fh:
-        fh.write(generate_catalog_header(models, hints))
+        fh.write(generate_catalog_header(models, hints, transports))
     # ponytail: App entity slots are StaticVectors sized from codegen counts and
     # push_back silently drops on overflow; the boot factory new up to
     # MAX_SELECTION entities at runtime, so reserve slots here (also defines

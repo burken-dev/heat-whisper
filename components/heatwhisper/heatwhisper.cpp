@@ -159,6 +159,7 @@ void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
   if (flow_pin_ != nullptr) flow_pin_->digital_write(false);
 }
 void HeatWhisperComponent::loop() {
+  if (!modbus_) {
   uint8_t b;
   while (available()) { read_byte(&b); rx_.push_back(b); }
   if (rx_.size() > 512) rx_.erase(rx_.begin(), rx_.begin() + (rx_.size() - 512));
@@ -188,9 +189,218 @@ void HeatWhisperComponent::loop() {
     f[f[4] + 5] = c;
     on_frame_(f.data(), f.size());
   }
+  return;
+  }
+  uint8_t b;
+  while (available()) { read_byte(&b); mrx_.push_back(b); }
+  if (mrx_.size() > 256) mrx_.erase(mrx_.begin(), mrx_.begin() + (mrx_.size() - 256));
+  for (;;) {
+    if (!pending_ || mrx_.empty()) break;
+    if (mrx_[0] != peer_) { mrx_.erase(mrx_.begin()); continue; }
+    if (mrx_.size() >= 5 && mrx_[1] == (uint8_t)(pending_fc_ | 0x80)) {
+      if (mrx_.size() < 5) break;
+      std::vector<uint8_t> f(mrx_.begin(), mrx_.begin() + 5);
+      mrx_.erase(mrx_.begin(), mrx_.begin() + 5);
+      on_modbus_frame_(f.data(), f.size());
+      break;
+    }
+    size_t need = 0;
+    if (pending_fc_ == 3 || pending_fc_ == 4 || pending_fc_ == 1 || pending_fc_ == 2)
+      need = (size_t) 3 + 2 * pending_cnt_ + 2;
+    else if (pending_fc_ == 6 || pending_fc_ == 16)
+      need = 8;
+    else break;
+    if (mrx_.size() < need) break;
+    std::vector<uint8_t> f(mrx_.begin(), mrx_.begin() + need);
+    mrx_.erase(mrx_.begin(), mrx_.begin() + need);
+    on_modbus_frame_(f.data(), f.size());
+    break;
+  }
+  uint32_t now = millis();
+  if (now - last_poll_ >= 5000) {  // ponytail: fixed 5s poll, no set_poll_interval yet
+    last_poll_ = now;
+    poll_one_();
+  }
+}
+// crc16_modbus: standard Modbus CRC-16 (poly 0xA001, init 0xFFFF), mirrors modbus_rtu.py.
+uint16_t HeatWhisperComponent::crc16_modbus(const uint8_t *d, size_t n) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < n; i++) {
+    crc ^= d[i];
+    for (int b = 0; b < 8; b++) crc = (crc & 1) ? (uint16_t)((crc >> 1) ^ 0xA001) : (uint16_t)(crc >> 1);
+  }
+  return crc;
+}
+uint8_t HeatWhisperComponent::write_fc_for_model_() const {
+  for (uint8_t i = 0; i < HW_TRANSPORTS_N; i++) {
+    uint8_t mi = HW_TRANSPORTS[i].model_idx;
+    if (model_ == HW_MODELS[mi].name) return HW_TRANSPORTS[i].write_fc;
+  }
+  return 6;
+}
+// decode_modbus_: BE words -> float, mirrors modbus_rtu.decode_be (factor/sign/CDAB);
+// corrupt min/max guard included. Error return, no assert.
+bool HeatWhisperComponent::decode_modbus_(uint16_t addr, const uint16_t *words, uint8_t nwords,
+                                          float *out) const {
+  if (words == nullptr || out == nullptr || nwords == 0) return false;
+  const HwMeta *reg = nullptr;
+  for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
+    if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+  if (reg == nullptr) return false;
+  bool wide = (reg->size == HW_U32 || reg->size == HW_S32);
+  float f = reg->factor ? (float) reg->factor : 1.0f;
+  float v;
+  if (!wide) {
+    if (nwords < 1) return false;
+    uint16_t w = words[0];
+    if (reg->size == HW_S16) {
+      v = (float)((w >= 32768) ? (int32_t) w - 65536 : (int32_t) w) / f;
+    } else if (reg->size == HW_S8) {
+      v = (float)(int8_t)(w & 0xFF) / f;
+    } else if (reg->size == HW_U8) {
+      v = (float)(w & 0xFF) / f;
+    } else {
+      v = (float) w / f;
+    }
+  } else {
+    if (nwords < 2) return false;
+    uint16_t hi = words[0], lo = words[1];
+    if (reg->wo == 1) { uint16_t t = hi; hi = lo; lo = t; }  // CDAB
+    uint32_t u = ((uint32_t) hi << 16) | lo;
+    v = (reg->size == HW_S32) ? (float)(int32_t) u / f : (float) u / f;
+  }
+  if ((reg->min != 0 || reg->max != 0) && reg->factor &&  // corrupt -> skip, matches reference
+      (v > (float) reg->max / f || v < (float) reg->min / f))
+    return false;
+  *out = v;
+  return true;
+}
+void HeatWhisperComponent::poll_one_() {
+  if (passive_) return;
+  if (pending_) {  // timeout: previous request unanswered
+    if (++retry_ >= 3) {
+      pending_ = false;
+      retry_ = 0;
+      if (!writes_.empty()) writes_.pop();  // drop failing write
+      else if (!polled_.empty()) poll_idx_++;
+    } else {
+      pending_ = false;  // retry same target below
+    }
+  }
+  if (!writes_.empty()) {
+    auto w = writes_.front();
+    const HwMeta *reg = nullptr;
+    for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
+      if (HW_META[k].addr == w.addr) { reg = &HW_META[k]; break; }
+    bool wide = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32));
+    uint8_t fc = write_fc_for_model_();
+    if (wide) fc = 16;  // FC06 cannot write 2 regs; MODBUS40 (16) never emits FC06
+    uint16_t wire = w.addr - 1;
+    if (fc == 6 && !wide) {
+      uint8_t o[8] = {peer_, 6, (uint8_t)(wire >> 8), (uint8_t) wire,
+                      (uint8_t)((w.raw >> 8) & 0xFF), (uint8_t)(w.raw & 0xFF), 0, 0};
+      uint16_t c = crc16_modbus(o, 6);
+      o[6] = c & 0xFF;
+      o[7] = c >> 8;
+      pending_addr_ = w.addr;
+      pending_fc_ = 6;
+      pending_cnt_ = 1;
+      pending_ = true;
+      tx_(o, 8);
+    } else {
+      uint32_t u = (uint32_t) w.raw;
+      uint16_t hi = wide ? (uint16_t)(u >> 16) : 0, lo = (uint16_t)(u & 0xFFFF);
+      uint8_t cnt = wide ? 2 : 1;
+      uint8_t o[13] = {peer_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
+                       0, 0, 0, 0, 0, 0};
+      if (!wide) {
+        o[7] = lo >> 8;
+        o[8] = lo & 0xFF;
+      } else {
+        o[7] = hi >> 8;
+        o[8] = hi & 0xFF;
+        o[9] = lo >> 8;
+        o[10] = lo & 0xFF;
+      }
+      size_t n = (size_t) 7 + 2 * cnt;
+      uint16_t c = crc16_modbus(o, n);
+      o[n] = c & 0xFF;
+      o[n + 1] = c >> 8;
+      pending_addr_ = w.addr;
+      pending_fc_ = 16;
+      pending_cnt_ = cnt;
+      pending_ = true;
+      tx_(o, n + 2);
+    }
+    return;
+  }
+  if (polled_.empty()) return;
+  uint16_t addr = polled_[poll_idx_ % polled_.size()];
+  const HwMeta *reg = nullptr;
+  for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
+    if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+  uint8_t fc = (reg != nullptr && reg->fc == 4) ? 4 : 3;  // ponytail: FC01/02 read as FC03 until needed
+  uint8_t cnt = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32)) ? 2 : 1;
+  uint16_t wire = addr - 1;
+  uint8_t o[8] = {peer_, fc, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, 0, 0};
+  uint16_t c = crc16_modbus(o, 6);
+  o[6] = c & 0xFF;
+  o[7] = c >> 8;
+  pending_addr_ = addr;
+  pending_fc_ = fc;
+  pending_cnt_ = cnt;
+  pending_ = true;
+  tx_(o, 8);
+}
+void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
+  if (!pending_ || f == nullptr || n < 5) return;
+  if (f[0] != peer_) return;  // not ours; keep pending for timeout path
+  auto fail_ = [&]() {
+    if (++retry_ >= 3) {
+      retry_ = 0;
+      pending_ = false;
+      if (pending_fc_ == 6 || pending_fc_ == 16) {
+        if (!writes_.empty()) writes_.pop();
+      } else if (!polled_.empty()) {
+        poll_idx_++;
+      } else {
+        pending_ = false;
+      }
+    } else {
+      pending_ = false;  // retry same target next poll
+    }
+  };
+  if (f[1] == (uint8_t)(pending_fc_ | 0x80)) {  // exception response
+    if (n >= 5 && crc16_modbus(f, 3) == (uint16_t)(f[3] | (f[4] << 8))) fail_();
+    return;
+  }
+  if (f[1] != pending_fc_) return;  // not our response; keep pending
+  if (pending_fc_ == 3 || pending_fc_ == 4 || pending_fc_ == 1 || pending_fc_ == 2) {
+    uint8_t want = (uint8_t)(2 * pending_cnt_);
+    if (n < (size_t) 3 + want + 2 || f[2] != want) { fail_(); return; }
+    if (crc16_modbus(f, n - 2) != (uint16_t)(f[n - 2] | (f[n - 1] << 8))) { fail_(); return; }
+    uint16_t words[2] = {0, 0};
+    for (uint8_t i = 0; i < pending_cnt_ && i < 2; i++)
+      words[i] = (uint16_t)((f[3 + 2 * i] << 8) | f[4 + 2 * i]);
+    float v;
+    if (!decode_modbus_(pending_addr_, words, pending_cnt_, &v)) { fail_(); return; }
+    uint16_t addr = pending_addr_;
+    pending_ = false;
+    retry_ = 0;
+    if (!polled_.empty()) poll_idx_++;
+    on_value(addr, v);
+  } else if (pending_fc_ == 6 || pending_fc_ == 16) {
+    if (n < 8) return;
+    if (crc16_modbus(f, n - 2) != (uint16_t)(f[n - 2] | (f[n - 1] << 8))) { fail_(); return; }
+    uint16_t wire = pending_addr_ - 1;
+    if (f[2] != (wire >> 8) || f[3] != (wire & 0xFF)) { fail_(); return; }
+    if (!writes_.empty()) writes_.pop();
+    pending_ = false;
+    retry_ = 0;
+  }
 }
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
-  if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
+  if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
@@ -199,7 +409,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
     if (!sent) send_ack_();
-  } else if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
+  } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
@@ -297,6 +507,10 @@ void HeatWhisperComponent::set_poll_registers(const std::vector<uint16_t> &addrs
   for (uint16_t a : addrs) ensure_polled(a);
 }
 void HeatWhisperComponent::ensure_polled(uint16_t addr) {
+  bool known = false;
+  for (uint16_t a : polled_)
+    if (a == addr) { known = true; break; }
+  if (!known) polled_.push_back(addr);
   uint8_t lo = addr & 0xFF, hi = addr >> 8;
   size_t laps = reads_.size();  // ponytail: queue has no iterators, rotate like on_frame_
   while (laps-- > 0) {
