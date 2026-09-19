@@ -5,6 +5,11 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/number/number.h"
+#include "esphome/components/select/select.h"
+#include "esphome/components/switch/switch.h"
+#include "esphome/core/preferences.h"
+#include "esphome/core/application.h"
+#include "catalog.h"
 #include <queue>
 #include <set>
 #include <string>
@@ -36,6 +41,41 @@ class NibeNumber : public esphome::number::Number, public esphome::Component {
   NibeComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
+class NibeSelect : public esphome::select::Select, public esphome::Component {
+ public:
+  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_register(uint16_t a) { addr_ = a; }
+  uint16_t get_register() const { return addr_; }
+  void set_mapping(const std::vector<int32_t> &raws) { raws_ = raws; }
+  void set_labels(const std::vector<std::string> &labels);  // owns strings, publishes traits options
+  void publish_raw(int32_t raw);  // raw->index fan-out; unknown raws skipped
+  void control(const std::string &value) override;
+ protected:
+  NibeComponent *parent_{nullptr};
+  uint16_t addr_{0};
+  std::vector<int32_t> raws_;
+  std::vector<std::string> labels_;  // owns option strings; traits hold pointers into these
+};
+class NibeSwitch : public esphome::switch_::Switch, public esphome::Component {
+ public:
+  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_register(uint16_t a) { addr_ = a; }
+  uint16_t get_register() const { return addr_; }
+  void write_state(bool state) override;
+ protected:
+  NibeComponent *parent_{nullptr};
+  uint16_t addr_{0};
+};
+struct NibeSelection {
+  uint32_t version{1};
+  uint16_t count{0};
+  uint16_t addrs[50];
+};
+// ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
+// (verified with host g++); NVS save/load use sizeof consistently so the
+// trailing pad bytes are harmless.
+static_assert(sizeof(NibeSelection{}) == 108, "NibeSelection layout");
+static_assert(50 == NIBE_MAX_SELECTION, "selection slots match catalog cap");
 class NibeComponent : public esphome::Component, public esphome::uart::UARTDevice {
   public:
   void set_slave_address(uint8_t a) { slave_ = a; }
@@ -56,6 +96,11 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   bool is_enabled(uint16_t addr) const { return disabled_.count(addr) == 0; }
   void add_sensor(NibeSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
   void add_number(NibeNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
+  void add_select(NibeSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
+  void add_switch(NibeSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
+  bool load_selection(NibeSelection *out);
+  bool save_selection(const uint16_t *addrs, uint16_t n);
+  void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
   void loop() override;
@@ -85,6 +130,8 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   std::queue<std::vector<uint8_t>> reads_;
   std::vector<NibeSensor *> sensors_;
   std::vector<NibeNumber *> numbers_;
+  std::vector<NibeSelect *> selects_;
+  std::vector<NibeSwitch *> switches_;
   std::set<uint16_t> disabled_;
 };
 }  // namespace nibe

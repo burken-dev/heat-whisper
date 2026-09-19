@@ -1,17 +1,127 @@
 // components/nibe/nibe.cpp (core loop + router + LE decoder)
 #include "nibe.h"
 #include "registers.h"
+#include "esphome/core/hal.h"
+#include "esphome/core/helpers.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 namespace esphome {
 namespace nibe {
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
+static const uint32_t NIBE_SEL_TYPE = 0x6E696273UL;  // 'nibs'
+bool NibeComponent::load_selection(NibeSelection *out) {
+  ESPPreferenceObject pref = global_preferences->make_preference<NibeSelection>(NIBE_SEL_TYPE, true);
+  if (!pref.load(out) || out->version != 1 || out->count > NIBE_MAX_SELECTION) return false;
+  return true;
+}
+bool NibeComponent::save_selection(const uint16_t *addrs, uint16_t n) {
+  if (n > NIBE_MAX_SELECTION) return false;
+  NibeSelection s{};
+  s.version = 1;
+  s.count = n;
+  if (n) memcpy(s.addrs, addrs, n * sizeof(uint16_t));
+  ESPPreferenceObject pref = global_preferences->make_preference<NibeSelection>(NIBE_SEL_TYPE, true);
+  return pref.save(&s);
+}
+// Parse hint opts "raw:label;raw:label" (labels carry \" and \\ escapes from _esc).
+static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector<std::string> *labels) {
+  for (const char *p = opts; *p;) {
+    const char *colon = strchr(p, ':');
+    if (colon == nullptr) break;
+    raws->push_back(atoi(std::string(p, colon).c_str()));
+    std::string label;
+    p = colon + 1;
+    while (*p && *p != ';') {
+      if (*p == '\\' && (p[1] == '"' || p[1] == '\\')) p++;
+      label += *p++;
+    }
+    labels->push_back(label);
+    if (*p == ';') p++;
+  }
+}
+void NibeComponent::create_entities() {
+  static const uint16_t TITLES_N = sizeof(NIBE_TITLES) / sizeof(NibeTitle);  // no NIBE_TITLES_N in catalog.h
+  uint16_t addrs[NIBE_MAX_SELECTION];
+  uint16_t n = 0;
+  NibeSelection sel{};
+  if (load_selection(&sel)) {
+    n = sel.count;
+    if (n) memcpy(addrs, sel.addrs, n * sizeof(uint16_t));
+  } else {
+    n = NIBE_DEFAULTS_N;
+    memcpy(addrs, NIBE_DEFAULTS, n * sizeof(uint16_t));
+  }
+  std::vector<uint32_t> used_hashes;  // catalog titles collide across models; skip dupes
+  for (uint16_t i = 0; i < n; i++) {
+    uint16_t addr = addrs[i];
+    const NibeMeta *meta = nullptr;
+    uint16_t mi = 0;
+    for (; mi < NIBE_META_N; mi++)  // ponytail: linear scan, same as decode loop
+      if (NIBE_META[mi].addr == addr) { meta = &NIBE_META[mi]; break; }
+    if (meta == nullptr) { ESP_LOGW("nibe", "Skipping unknown register %u (map updated after save?)", addr); continue; }
+    // NIBE_TITLES parallels NIBE_META (same sorted addr list in generate_catalog_header).
+    const char *title = (mi < TITLES_N && NIBE_TITLES[mi].addr == addr) ? NIBE_TITLES[mi].title : nullptr;
+    if (title == nullptr) { ESP_LOGW("nibe", "Skipping register %u without catalog title", addr); continue; }
+    // ponytail: canonical hash codegen passes to App.register_* (helpers.h),
+    // not a hand mirror of object_id_for.
+    uint32_t hash = fnv1_hash_object_id(title, strlen(title));
+    bool dupe = false;
+    for (uint32_t h : used_hashes)
+      if (h == hash) { dupe = true; break; }
+    if (dupe) { ESP_LOGW("nibe", "Skipping register %u with duplicate object id", addr); continue; }
+    const NibeHint *hint = nullptr;
+    for (uint8_t k = 0; k < NIBE_HINTS_N; k++)
+      if (NIBE_HINTS[k].addr == addr) { hint = &NIBE_HINTS[k]; break; }
+    uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
+    if (kind == 0) {
+      auto *sen = new NibeSensor();
+      sen->set_parent(this);
+      sen->set_register(addr);
+      sen->set_accuracy_decimals(1);  // ponytail: no runtime unit setter in 2026.9.0; units are codegen-pooled
+      App.register_sensor(sen, title, hash, 0);
+      add_sensor(sen);
+    } else if (kind == 1) {
+      float f = meta->factor ? (float) meta->factor : 1.0f;
+      auto *num = new NibeNumber();
+      num->set_parent(this);
+      num->set_register(addr);
+      num->traits.set_min_value((float) meta->min / f);
+      num->traits.set_max_value((float) meta->max / f);
+      num->traits.set_step(1.0f / f);  // one raw LSB; no step info in catalog
+      App.register_number(num, title, hash, 0);
+      add_number(num);
+    } else if (kind == 2) {
+      auto *sw = new NibeSwitch();
+      sw->set_parent(this);
+      sw->set_register(addr);
+      App.register_switch(sw, title, hash, 0);
+      add_switch(sw);
+    } else if (kind == 3 && hint != nullptr) {
+      std::vector<int32_t> raws;
+      std::vector<std::string> labels;
+      parse_opts(hint->opts, &raws, &labels);
+      if (labels.empty()) { ESP_LOGW("nibe", "Skipping select %u with no options", addr); continue; }
+      auto *sel = new NibeSelect();
+      sel->set_parent(this);
+      sel->set_register(addr);
+      sel->set_mapping(raws);
+      sel->set_labels(labels);
+      App.register_select(sel, title, hash, 0);
+      add_select(sel);
+    } else {
+      ESP_LOGW("nibe", "Skipping register %u with unknown kind %u", addr, kind);
+      continue;
+    }
+    used_hashes.push_back(hash);
+  }
+}
 void NibeComponent::setup() {
   if (flow_pin_ != nullptr) {
     flow_pin_->setup();
     flow_pin_->digital_write(false);
   }
+  create_entities();
 }
 void NibeComponent::tx_(const uint8_t *d, size_t len) {
   if (flow_pin_ != nullptr) flow_pin_->digital_write(true);
@@ -177,6 +287,41 @@ void NibeComponent::on_value(uint16_t addr, float v) {
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)
     if (n->get_register() == addr) n->publish_value(v);
+  for (auto *sw : switches_)
+    if (sw->get_register() == addr) sw->publish_state(v != 0);
+  for (auto *sel : selects_)
+    if (sel->get_register() == addr) {
+      const NibeMeta *meta = nullptr;
+      for (uint16_t k = 0; k < NIBE_META_N; k++)
+        if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
+      float f = (meta != nullptr && meta->factor) ? (float) meta->factor : 1.0f;
+      sel->publish_raw((int32_t) std::lround(v * f));
+    }
+}
+void NibeSelect::set_labels(const std::vector<std::string> &labels) {
+  labels_ = labels;  // ponytail: fill before set_options; realloc would dangle traits pointers
+  esphome::FixedVector<const char *> opts;
+  opts.init(labels_.size());
+  for (auto &l : labels_) opts.push_back(l.c_str());
+  this->traits.set_options(opts);
+}
+void NibeSelect::publish_raw(int32_t raw) {
+  for (size_t i = 0; i < raws_.size(); i++)
+    if (raws_[i] == raw) { publish_state(i); return; }
+  // unknown raws skipped
+}
+void NibeSelect::control(const std::string &value) {
+  if (parent_ == nullptr) return;
+  auto idx = this->index_of(value);
+  if (idx.has_value() && idx.value() < raws_.size()) {
+    parent_->queue_write(addr_, raws_[idx.value()]);
+    publish_state(value);
+  }
+}
+void NibeSwitch::write_state(bool state) {
+  if (parent_ == nullptr) return;
+  parent_->queue_write(addr_, state ? 1 : 0);
+  publish_state(state);
 }
 void NibeNumber::control(float value) {
   if (parent_ == nullptr) return;

@@ -3,8 +3,9 @@ import os, json, esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components import uart
-from .registers import generate_header, generate_catalog_header, load_hints, DEFAULT_ALLOWLIST
+from .registers import generate_header, generate_catalog_header, load_hints, DEFAULT_ALLOWLIST, MAX_SELECTION
 CODEOWNERS = ["@andreas"]
+AUTO_LOAD = ["select"]  # boot factory news NibeSelect entities; no YAML select platform required
 nibe_ns = cg.esphome_ns.namespace("nibe")
 Nibe = nibe_ns.class_("NibeComponent", cg.Component, uart.UARTDevice)
 CONF_EXTRA_POLL = "extra_poll"
@@ -39,3 +40,13 @@ async def to_code(config):
     catalog_out = os.path.join(os.path.dirname(__file__), "catalog.h")
     with open(catalog_out, "w") as fh:
         fh.write(generate_catalog_header(models, hints))
+    # ponytail: App entity slots are StaticVectors sized from codegen counts and
+    # push_back silently drops on overflow; the boot factory news up to
+    # MAX_SELECTION entities at runtime, so reserve slots here (also defines
+    # USE_SELECT when no YAML select platform exists).
+    from esphome.core import CORE  # local: host pytest stubs esphome (see tests/conftest.py)
+    for _ in range(MAX_SELECTION):
+        CORE.register_platform_component("sensor", var)
+        CORE.register_platform_component("number", var)
+        CORE.register_platform_component("switch", var)
+        CORE.register_platform_component("select", var)
