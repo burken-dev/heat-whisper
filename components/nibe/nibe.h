@@ -56,8 +56,8 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
     else disabled_.insert(addr);
   }
   bool is_enabled(uint16_t addr) const { return disabled_.count(addr) == 0; }
-  void add_sensor(NibeSensor *s) { sensors_.push_back(s); }
-  void add_number(NibeNumber *n) { numbers_.push_back(n); }
+  void add_sensor(NibeSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
+  void add_number(NibeNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
   void loop() override;
