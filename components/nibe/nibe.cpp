@@ -161,8 +161,12 @@ void NibeComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
 }
 void NibeComponent::ensure_polled(uint16_t addr) {
   uint8_t lo = addr & 0xFF, hi = addr >> 8;
-  for (auto &q : reads_)
-    if (q.size() == 6 && q[3] == lo && q[4] == hi) return;
+  size_t laps = reads_.size();  // ponytail: queue has no iterators, rotate like on_frame_
+  while (laps-- > 0) {
+    auto q = reads_.front(); reads_.pop();
+    if (q.size() == 6 && q[3] == lo && q[4] == hi) { reads_.push(q); return; }
+    reads_.push(q);
+  }
   uint8_t o[6] = {0xC0, 0x69, 0x02, lo, hi, 0};
   o[5] = calc_crc_c0(o);
   reads_.emplace(o, o + 6);
