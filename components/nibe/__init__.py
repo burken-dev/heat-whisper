@@ -3,7 +3,7 @@ import os, json, esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components import uart
-from .registers import generate_header, DEFAULT_ALLOWLIST
+from .registers import generate_header, generate_catalog_header, load_hints, DEFAULT_ALLOWLIST
 CODEOWNERS = ["@andreas"]
 nibe_ns = cg.esphome_ns.namespace("nibe")
 Nibe = nibe_ns.class_("NibeComponent", cg.Component, uart.UARTDevice)
@@ -34,3 +34,8 @@ async def to_code(config):
     out = os.path.join(os.path.dirname(__file__), "registers.h")
     with open(out, "w") as fh:
         fh.write(generate_header(models))
+    hints_path = os.path.join(os.path.dirname(__file__), "entity_hints.json")
+    hints = load_hints(hints_path) if os.path.exists(hints_path) else {}
+    catalog_out = os.path.join(os.path.dirname(__file__), "catalog.h")
+    with open(catalog_out, "w") as fh:
+        fh.write(generate_catalog_header(models, hints))

@@ -112,3 +112,51 @@ def validate_selection(addrs, models):
     if len(clean) > MAX_SELECTION:
         return None, f"too many registers ({len(clean)} > {MAX_SELECTION})"
     return clean, ""
+
+def _esc(s):
+    return (s or "").replace("\\", "\\\\").replace('"', '\\"')
+
+def generate_catalog_header(models, hints):
+    by_reg = _by_reg(models)
+    addrs = sorted({int(r["register"]) for regs in models.values() for r in regs})
+    titles = {}
+    for regs in models.values():
+        for r in regs:
+            titles.setdefault(r["register"], (r.get("titel") or f"Register {r['register']}",
+                                              (r.get("unit") or "").replace("�", "°")))
+    lines = ["#pragma once", '#include <stdint.h>',
+             "struct NibeMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };",
+             "struct NibeTitle { uint16_t addr; const char *title; const char *unit; };",
+             "struct NibeModel { const char *name; const uint16_t *addrs; uint16_t n; };",
+             "struct NibeHint { uint16_t addr; uint8_t kind; const char *opts; };"]
+    entries = ",".join(
+        f"{{{a},{_num(by_reg[str(a)].get('factor', 1))},"
+        f"{SIZE_CODES.get(by_reg[str(a)].get('size') or 's16', SIZE_CODES['s16'])},"        f"{1 if by_reg[str(a)].get('mode') == 'R/W' else 0},"
+        f"{_num(by_reg[str(a)].get('min', 0))},{_num(by_reg[str(a)].get('max', 0))}}}"
+        for a in addrs)
+    lines.append(f"static const NibeMeta NIBE_META[] = {{{entries}}};")
+    lines.append(f"static const uint16_t NIBE_META_N = {len(addrs)};")
+    trows = ",".join(f'{{{a},"{_esc(titles[str(a)][0])}","{_esc(titles[str(a)][1])}"}}' for a in addrs)
+    lines.append(f"static const NibeTitle NIBE_TITLES[] = {{{trows}}};")
+    for m, regs in sorted(models.items()):
+        want = normalize_model(m)
+        lst = sorted({int(r["register"]) for r in regs})
+        lines.append(f"static const uint16_t NIBE_MODEL_{want}[] = {{{','.join(map(str, lst))}}};")
+    mrows = []
+    for m, regs in sorted(models.items()):
+        want = normalize_model(m)
+        n = len({int(r["register"]) for r in regs})
+        mrows.append(f'{{"{m}",NIBE_MODEL_{want},{n}}}')
+    lines.append(f"static const NibeModel NIBE_MODELS[] = {{{','.join(mrows)}}};")
+    lines.append(f"static const uint8_t NIBE_MODELS_N = {len(models)};")
+    kinds = {"sensor": 0, "number": 1, "switch": 2, "select": 3}
+    hrows = []
+    for a_str, h in sorted(hints.items(), key=lambda kv: int(kv[0])):
+        opts = ";".join(f"{v}:{_esc(l)}" for v, l in h.get("options", []))
+        hrows.append(f'{{{a_str},{kinds[h["type"]]},"{opts}"}}')
+    lines.append(f"static const NibeHint NIBE_HINTS[] = {{{','.join(hrows)}}};")
+    lines.append(f"static const uint8_t NIBE_HINTS_N = {len(hrows)};")
+    lines.append(f"static const uint16_t NIBE_DEFAULTS[] = {{{','.join(map(str, DEFAULT_ENABLED))}}};")
+    lines.append(f"static const uint8_t NIBE_DEFAULTS_N = {len(DEFAULT_ENABLED)};")
+    lines.append(f"static const uint8_t NIBE_MAX_SELECTION = {MAX_SELECTION};")
+    return "\n".join(lines) + "\n"

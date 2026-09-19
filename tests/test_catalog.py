@@ -52,3 +52,29 @@ def test_defaults_match_allowlist():
     from components.nibe.registers import DEFAULT_ALLOWLIST
     assert sorted(DEFAULT_ENABLED) == sorted(a for a in DEFAULT_ALLOWLIST if a != 10001) or \
         set(DEFAULT_ENABLED) <= set(DEFAULT_ALLOWLIST)
+
+def test_generate_catalog_header_layout():
+    from components.nibe.registers import generate_catalog_header
+    models = {"F750": [
+        {"register": "40004", "factor": 10, "size": "s16", "mode": "R",
+         "titel": "BT1 Outdoor Temperature", "unit": "°C", "min": "-500", "max": "500"},
+        {"register": "47041", "factor": 1, "size": "u8", "mode": "R/W",
+         "titel": "Comfort", "unit": "", "min": "0", "max": "4"}]}
+    hints = {"47041": {"type": "select", "options": [[0, "Eco"], [1, "Normal"]]},
+             "47371": {"type": "switch"}}
+    hdr = generate_catalog_header(models, hints)
+    assert "NIBE_META" in hdr and "NIBE_TITLES" in hdr
+    assert "NIBE_MODEL_F750" in hdr and "NIBE_MODELS" in hdr
+    assert "NIBE_DEFAULTS" in hdr and "NIBE_HINTS" in hdr
+    assert "NIBE_MAX_SELECTION = 50" in hdr
+    assert "{40004,10,3,0,-500,500}" in hdr
+    assert "BT1 Outdoor Temperature" in hdr
+    assert "0:Eco;1:Normal" in hdr
+
+def test_generate_catalog_header_unknown_size_falls_back_to_s16():
+    from components.nibe.registers import generate_catalog_header
+    models = {"VVMS320": [
+        {"register": "31561", "factor": "1", "size": "", "mode": "R",
+         "titel": "Datum periodisk varmvatten", "unit": "", "min": "", "max": ""}]}
+    hdr = generate_catalog_header(models, {})
+    assert "{31561,1,3,0,0,0}" in hdr
