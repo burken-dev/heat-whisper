@@ -6,9 +6,9 @@ from . import Heatpump, heatpump_ns
 from .registers import is_known
 
 _LOGGER = logging.getLogger(__name__)
-NibeSensor = heatpump_ns.class_("NibeSensor", sensor.Sensor, cg.Component)
+HeatpumpSensor = heatpump_ns.class_("HeatpumpSensor", sensor.Sensor, cg.Component)
 
-CONFIG_SCHEMA = sensor.sensor_schema(NibeSensor).extend({
+CONFIG_SCHEMA = sensor.sensor_schema(HeatpumpSensor).extend({
     cv.GenerateID("heatpump_id"): cv.use_id(Heatpump),
     cv.Required("register"): cv.int_,
 })

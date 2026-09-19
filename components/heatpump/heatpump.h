@@ -1,4 +1,4 @@
-// components/nibe/nibe.h
+// components/heatpump/heatpump.h
 #pragma once
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
@@ -15,34 +15,34 @@
 #include <vector>
 // ponytail: must match SIZE_CODES in registers.py
 namespace esphome {
-namespace nibe {
-enum NibeSize : uint8_t { NIBE_U8 = 0, NIBE_S8, NIBE_U16, NIBE_S16, NIBE_U32, NIBE_S32 };
+namespace heatpump {
+enum HpSize : uint8_t { HP_U8 = 0, HP_S8, HP_U16, HP_S16, HP_U32, HP_S32 };
 struct WriteRequest { uint16_t addr; int32_t raw; };
-class NibeComponent;  // entities hold a parent pointer only
-class NibeSensor : public esphome::sensor::Sensor, public esphome::Component {
+class HeatpumpComponent;  // entities hold a parent pointer only
+class HeatpumpSensor : public esphome::sensor::Sensor, public esphome::Component {
  public:
-  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_parent(HeatpumpComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void publish_value(float v) { publish_state(v); }
  protected:
-  NibeComponent *parent_{nullptr};
+  HeatpumpComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-class NibeNumber : public esphome::number::Number, public esphome::Component {
+class HeatpumpNumber : public esphome::number::Number, public esphome::Component {
  public:
-  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_parent(HeatpumpComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void publish_value(float v) { publish_state(v); }
-  void control(float value) override;  // clamp to NIBE_META range, queue_write
+  void control(float value) override;  // clamp to HP_META range, queue_write
  protected:
-  NibeComponent *parent_{nullptr};
+  HeatpumpComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-class NibeSelect : public esphome::select::Select, public esphome::Component {
+class HeatpumpSelect : public esphome::select::Select, public esphome::Component {
  public:
-  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_parent(HeatpumpComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void set_mapping(const std::vector<int32_t> &raws) { raws_ = raws; }
@@ -50,22 +50,22 @@ class NibeSelect : public esphome::select::Select, public esphome::Component {
   void publish_raw(int32_t raw);  // raw->index fan-out; unknown raws skipped
   void control(const std::string &value) override;
  protected:
-  NibeComponent *parent_{nullptr};
+  HeatpumpComponent *parent_{nullptr};
   uint16_t addr_{0};
   std::vector<int32_t> raws_;
   std::vector<std::string> labels_;  // owns option strings; traits hold pointers into these
 };
-class NibeSwitch : public esphome::switch_::Switch, public esphome::Component {
+class HeatpumpSwitch : public esphome::switch_::Switch, public esphome::Component {
  public:
-  void set_parent(NibeComponent *p) { parent_ = p; }
+  void set_parent(HeatpumpComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void write_state(bool state) override;
  protected:
-  NibeComponent *parent_{nullptr};
+  HeatpumpComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-struct NibeSelection {
+struct HeatpumpSelection {
   uint32_t version{1};
   uint16_t count{0};
   uint16_t addrs[50];
@@ -73,9 +73,9 @@ struct NibeSelection {
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
 // (verified with host g++); NVS save/load use sizeof consistently so the
 // trailing pad bytes are harmless.
-static_assert(sizeof(NibeSelection{}) == 108, "NibeSelection layout");
-static_assert(50 == NIBE_MAX_SELECTION, "selection slots match catalog cap");
-class NibeComponent : public esphome::Component, public esphome::uart::UARTDevice {
+static_assert(sizeof(HeatpumpSelection{}) == 108, "HeatpumpSelection layout");
+static_assert(50 == HP_MAX_SELECTION, "selection slots match catalog cap");
+class HeatpumpComponent : public esphome::Component, public esphome::uart::UARTDevice {
   public:
   void set_slave_address(uint8_t a) { slave_ = a; }
   void set_passive(bool p) { passive_ = p; }
@@ -84,28 +84,28 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   void set_poll_registers(const std::vector<uint16_t> &addrs);
   void ensure_polled(uint16_t addr);
   void queue_write(uint16_t addr, int32_t raw) {
-    if (addr < 20000) { ESP_LOGW("nibe", "Dropping RMU-range write addr %u", addr); return; }
-    if (writes_.size() >= 4) { ESP_LOGW("nibe", "Write queue full, dropping oldest"); writes_.pop(); }
+    if (addr < 20000) { ESP_LOGW("heatpump", "Dropping RMU-range write addr %u", addr); return; }
+    if (writes_.size() >= 4) { ESP_LOGW("heatpump", "Write queue full, dropping oldest"); writes_.pop(); }
     writes_.push({addr, raw});
   }
-  void add_sensor(NibeSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
-  void add_number(NibeNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
-  void add_select(NibeSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
-  void add_switch(NibeSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
-  bool load_selection(NibeSelection *out);
+  void add_sensor(HeatpumpSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
+  void add_number(HeatpumpNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
+  void add_select(HeatpumpSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
+  void add_switch(HeatpumpSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
+  bool load_selection(HeatpumpSelection *out);
   bool save_selection(const uint16_t *addrs, uint16_t n);
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
   void loop() override;
-  // calc_crc: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].
-  static uint8_t calc_crc(const uint8_t *d) {
+  // calc_crc_nibe: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].
+  static uint8_t calc_crc_nibe(const uint8_t *d) {
     uint8_t c = 0;
     for (int i = 2; i < d[4] + 5; i++) c ^= d[i];
     return c;
   }
-  // calc_crc_c0: C0-framed slave frames [C0,CMD,LEN,DATA,CHK], LEN at [2].
-  static uint8_t calc_crc_c0(const uint8_t *d) {
+  // calc_crc_c0_nibe: C0-framed slave frames [C0,CMD,LEN,DATA,CHK], LEN at [2].
+  static uint8_t calc_crc_c0_nibe(const uint8_t *d) {
     uint8_t c = 0;
     for (int i = 0; i < d[2] + 3; i++) c ^= d[i];
     return c;
@@ -122,10 +122,10 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   std::vector<uint8_t> rx_;
   std::queue<WriteRequest> writes_;
   std::queue<std::vector<uint8_t>> reads_;
-  std::vector<NibeSensor *> sensors_;
-  std::vector<NibeNumber *> numbers_;
-  std::vector<NibeSelect *> selects_;
-  std::vector<NibeSwitch *> switches_;
+  std::vector<HeatpumpSensor *> sensors_;
+  std::vector<HeatpumpNumber *> numbers_;
+  std::vector<HeatpumpSelect *> selects_;
+  std::vector<HeatpumpSwitch *> switches_;
 };
-}  // namespace nibe
+}  // namespace heatpump
 }  // namespace esphome

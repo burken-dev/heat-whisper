@@ -6,9 +6,9 @@ from . import Heatpump, heatpump_ns
 from .registers import is_known
 
 _LOGGER = logging.getLogger(__name__)
-NibeNumber = heatpump_ns.class_("NibeNumber", number.Number, cg.Component)
+HeatpumpNumber = heatpump_ns.class_("HeatpumpNumber", number.Number, cg.Component)
 
-CONFIG_SCHEMA = number.number_schema(NibeNumber).extend({
+CONFIG_SCHEMA = number.number_schema(HeatpumpNumber).extend({
     cv.GenerateID("heatpump_id"): cv.use_id(Heatpump),
     cv.Required("register"): cv.int_,
     cv.Required("min_value"): cv.float_,

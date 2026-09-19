@@ -1,5 +1,5 @@
-// components/nibe/nibe.cpp (core loop + router + LE decoder)
-#include "nibe.h"
+// components/heatpump/heatpump.cpp (core loop + router + LE decoder)
+#include "heatpump.h"
 #include "picker.h"
 #include "esphome/components/sensor/filter.h"
 #include "esphome/core/hal.h"
@@ -11,27 +11,27 @@
 #include <cstring>
 #include <limits>
 namespace esphome {
-namespace nibe {
+namespace heatpump {
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
-static const uint32_t NIBE_SEL_TYPE = 0x6E696273UL;  // 'nibs'
-bool NibeComponent::load_selection(NibeSelection *out) {
-  ESPPreferenceObject pref = global_preferences->make_preference<NibeSelection>(NIBE_SEL_TYPE, true);
-  if (!pref.load(out) || out->version != 1 || out->count > NIBE_MAX_SELECTION) return false;
+static const uint32_t HP_SEL_TYPE = 0x6E696273UL;  // keep: saved selections survive OTA
+bool HeatpumpComponent::load_selection(HeatpumpSelection *out) {
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatpumpSelection>(HP_SEL_TYPE, true);
+  if (!pref.load(out) || out->version != 1 || out->count > HP_MAX_SELECTION) return false;
   return true;
 }
-bool NibeComponent::save_selection(const uint16_t *addrs, uint16_t n) {
-  if (n > NIBE_MAX_SELECTION) return false;
-  NibeSelection s{};
+bool HeatpumpComponent::save_selection(const uint16_t *addrs, uint16_t n) {
+  if (n > HP_MAX_SELECTION) return false;
+  HeatpumpSelection s{};
   s.version = 1;
   s.count = n;
   if (n) memcpy(s.addrs, addrs, n * sizeof(uint16_t));
-  ESPPreferenceObject pref = global_preferences->make_preference<NibeSelection>(NIBE_SEL_TYPE, true);
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatpumpSelection>(HP_SEL_TYPE, true);
   return pref.save(&s);
 }
-// Post-Task-5 name authority: factory names for the 18 NIBE_DEFAULTS addrs,
+// Post-Task-5 name authority: factory names for the 18 HP_DEFAULTS addrs,
 // copied verbatim from packages/base.yaml so HA entity names stay identical.
 // Task 5 deletes the YAML blocks; this table is then the single source.
-static const struct { uint16_t addr; const char *name; } NIBE_BASE_NAMES[] = {
+static const struct { uint16_t addr; const char *name; } HP_FACTORY_NAMES[] = {
   {40004, "BT1 Outdoor"}, {40008, "Supply Temp S1"}, {40012, "Return Temp"},
   {40013, "Hot Water Top BT7"}, {40014, "Hot Water BT6"}, {43009, "Calculated Supply"},
   {43136, "Compressor Frequency"}, {43005, "Degree Minutes"}, {40033, "Room Temp S1"},
@@ -40,8 +40,8 @@ static const struct { uint16_t addr; const char *name; } NIBE_BASE_NAMES[] = {
   {47370, "Allow Additive Heating"}, {47387, "Hot Water Production"}, {47043, "Hot Water Luxury Start Temp"},
 };
 static const char *base_name_for(uint16_t addr) {
-  for (uint8_t i = 0; i < sizeof(NIBE_BASE_NAMES) / sizeof(NIBE_BASE_NAMES[0]); i++)
-    if (NIBE_BASE_NAMES[i].addr == addr) return NIBE_BASE_NAMES[i].name;
+  for (uint8_t i = 0; i < sizeof(HP_FACTORY_NAMES) / sizeof(HP_FACTORY_NAMES[0]); i++)
+    if (HP_FACTORY_NAMES[i].addr == addr) return HP_FACTORY_NAMES[i].name;
   return nullptr;
 }
 // Parse hint opts "raw:label;raw:label" (labels carry \" and \\ escapes from _esc).
@@ -60,44 +60,44 @@ static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector
     if (*p == ';') p++;
   }
 }
-void NibeComponent::create_entities() {
-  static const uint16_t TITLES_N = sizeof(NIBE_TITLES) / sizeof(NibeTitle);  // no NIBE_TITLES_N in catalog.h
-  uint16_t addrs[NIBE_MAX_SELECTION];
+void HeatpumpComponent::create_entities() {
+  static const uint16_t TITLES_N = sizeof(HP_TITLES) / sizeof(HpTitle);  // no HP_TITLES_N in catalog.h
+  uint16_t addrs[HP_MAX_SELECTION];
   uint16_t n = 0;
-  NibeSelection sel{};
+  HeatpumpSelection sel{};
   if (load_selection(&sel)) {
     n = sel.count;
     if (n) memcpy(addrs, sel.addrs, n * sizeof(uint16_t));
   } else {
-    n = std::min(NIBE_DEFAULTS_N, NIBE_MAX_SELECTION);
-    memcpy(addrs, NIBE_DEFAULTS, n * sizeof(uint16_t));
+    n = std::min(HP_DEFAULTS_N, HP_MAX_SELECTION);
+    memcpy(addrs, HP_DEFAULTS, n * sizeof(uint16_t));
   }
   std::vector<uint32_t> used_hashes;  // catalog titles collide across models; skip dupes
   for (uint16_t i = 0; i < n; i++) {
     uint16_t addr = addrs[i];
-    const NibeMeta *meta = nullptr;
-    for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, same as decode loop
-      if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
-    if (meta == nullptr) { ESP_LOGW("nibe", "Skipping unknown register %u (map updated after save?)", addr); continue; }
+    const HpMeta *meta = nullptr;
+    for (uint16_t k = 0; k < HP_META_N; k++)  // ponytail: linear scan, same as decode loop
+      if (HP_META[k].addr == addr) { meta = &HP_META[k]; break; }
+    if (meta == nullptr) { ESP_LOGW("heatpump", "Skipping unknown register %u (map updated after save?)", addr); continue; }
     const char *title = base_name_for(addr);  // post-Task-5 name authority; catalog title otherwise
     if (title == nullptr)
       for (uint16_t t = 0; t < TITLES_N; t++)
-        if (NIBE_TITLES[t].addr == addr) { title = NIBE_TITLES[t].title; break; }
-    if (title == nullptr) { ESP_LOGW("nibe", "Skipping register %u without catalog title", addr); continue; }
+        if (HP_TITLES[t].addr == addr) { title = HP_TITLES[t].title; break; }
+    if (title == nullptr) { ESP_LOGW("heatpump", "Skipping register %u without catalog title", addr); continue; }
     // ponytail: canonical hash codegen passes to App.register_* (helpers.h),
     // not a hand mirror of object_id_for.
     uint32_t hash = fnv1_hash_object_id(title, strlen(title));
     bool dupe = false;
     for (uint32_t h : used_hashes)
       if (h == hash) { dupe = true; break; }
-    if (dupe) { ESP_LOGW("nibe", "Skipping register %u with duplicate object id", addr); continue; }
-    const NibeHint *hint = nullptr;
-    for (uint8_t k = 0; k < NIBE_HINTS_N; k++)
-      if (NIBE_HINTS[k].addr == addr) { hint = &NIBE_HINTS[k]; break; }
+    if (dupe) { ESP_LOGW("heatpump", "Skipping register %u with duplicate object id", addr); continue; }
+    const HpHint *hint = nullptr;
+    for (uint8_t k = 0; k < HP_HINTS_N; k++)
+      if (HP_HINTS[k].addr == addr) { hint = &HP_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
     if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
     if (kind == 0) {
-      auto *sen = new NibeSensor();
+      auto *sen = new HeatpumpSensor();
       sen->set_parent(this);
       sen->set_register(addr);
       sen->set_accuracy_decimals(1);  // ponytail: no runtime unit setter in 2026.9.0; units are codegen-pooled
@@ -112,7 +112,7 @@ void NibeComponent::create_entities() {
       add_sensor(sen);
     } else if (kind == 1) {
       float f = meta->factor ? (float) meta->factor : 1.0f;
-      auto *num = new NibeNumber();
+      auto *num = new HeatpumpNumber();
       num->set_parent(this);
       num->set_register(addr);
       num->traits.set_min_value((float) meta->min / f);
@@ -121,7 +121,7 @@ void NibeComponent::create_entities() {
       App.register_number(num, title, hash, 0);
       add_number(num);
     } else if (kind == 2) {
-      auto *sw = new NibeSwitch();
+      auto *sw = new HeatpumpSwitch();
       sw->set_parent(this);
       sw->set_register(addr);
       App.register_switch(sw, title, hash, 0);
@@ -130,8 +130,8 @@ void NibeComponent::create_entities() {
       std::vector<int32_t> raws;
       std::vector<std::string> labels;
       parse_opts(hint->opts, &raws, &labels);
-      if (labels.empty()) { ESP_LOGW("nibe", "Skipping select %u with no options", addr); continue; }
-      auto *sel = new NibeSelect();
+      if (labels.empty()) { ESP_LOGW("heatpump", "Skipping select %u with no options", addr); continue; }
+      auto *sel = new HeatpumpSelect();
       sel->set_parent(this);
       sel->set_register(addr);
       sel->set_mapping(raws);
@@ -139,26 +139,26 @@ void NibeComponent::create_entities() {
       App.register_select(sel, title, hash, 0);
       add_select(sel);
     } else {
-      ESP_LOGW("nibe", "Skipping register %u with unknown kind %u", addr, kind);
+      ESP_LOGW("heatpump", "Skipping register %u with unknown kind %u", addr, kind);
       continue;
     }
     used_hashes.push_back(hash);
   }
 }
-void NibeComponent::setup() {
+void HeatpumpComponent::setup() {
   if (flow_pin_ != nullptr) {
     flow_pin_->setup();
     flow_pin_->digital_write(false);
   }
   create_entities();
 }
-void NibeComponent::tx_(const uint8_t *d, size_t len) {
+void HeatpumpComponent::tx_(const uint8_t *d, size_t len) {
   if (flow_pin_ != nullptr) flow_pin_->digital_write(true);
   write_array(d, len);
   flush();
   if (flow_pin_ != nullptr) flow_pin_->digital_write(false);
 }
-void NibeComponent::loop() {
+void HeatpumpComponent::loop() {
   uint8_t b;
   while (available()) { read_byte(&b); rx_.push_back(b); }
   if (rx_.size() > 512) rx_.erase(rx_.begin(), rx_.begin() + (rx_.size() - 512));
@@ -172,7 +172,7 @@ void NibeComponent::loop() {
     if (len > 64) { rx_.erase(rx_.begin()); continue; }
     if (rx_.size() < (size_t) len + 6) return;
     std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
-    if (calc_crc(f.data()) != f[len + 5]) {
+    if (calc_crc_nibe(f.data()) != f[len + 5]) {
       send_nack_();
       rx_.erase(rx_.begin());
       continue;
@@ -189,7 +189,7 @@ void NibeComponent::loop() {
     on_frame_(f.data(), f.size());
   }
 }
-void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
+void HeatpumpComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
     size_t laps = reads_.size();
@@ -206,7 +206,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
       uint8_t o[10] = {0xC0, 0x6B, 0x06, (uint8_t)(w.addr & 0xFF), (uint8_t)(w.addr >> 8),
                        (uint8_t)(w.raw & 0xFF), (uint8_t)((w.raw >> 8) & 0xFF),
                        (uint8_t)((w.raw >> 16) & 0xFF), (uint8_t)((w.raw >> 24) & 0xFF), 0};
-      o[9] = calc_crc_c0(o);
+      o[9] = calc_crc_c0_nibe(o);
       tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
@@ -230,21 +230,21 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
-        const NibeMeta *reg = nullptr;
-        for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
-          if (NIBE_META[k].addr == addr) { reg = &NIBE_META[k]; break; }
+        const HpMeta *reg = nullptr;
+        for (uint16_t k = 0; k < HP_META_N; k++)  // ponytail: linear scan, catalog-wide
+          if (HP_META[k].addr == addr) { reg = &HP_META[k]; break; }
         if (reg == nullptr) { i += 4; continue; }
-        bool wide = (reg->size == NIBE_U32 || reg->size == NIBE_S32);
+        bool wide = (reg->size == HP_U32 || reg->size == HP_S32);
         uint8_t need = wide ? (f[3] == 0x68 ? 8 : 6) : 4;
         if (i + need > n - 1) break;
         float v;
         if (!wide) {
           uint16_t w = f[i + 2] | ((uint16_t) f[i + 3] << 8);
           int32_t raw = w;
-          if (reg->size == NIBE_S8) {  // fixup matches reference
+          if (reg->size == HP_S8) {  // fixup matches reference
             if (raw > 128 && raw < 32768) raw -= 256;
             else if (raw >= 32768) raw -= 65536;
-          } else if (reg->size == NIBE_S16) {
+          } else if (reg->size == HP_S16) {
             if (w >= 32768) raw -= 65536;
           }
           v = scale(raw, reg->factor);
@@ -254,7 +254,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
                  ((uint32_t) f[i + 7] << 24))
               : ((uint32_t) f[i + 4] | ((uint32_t) f[i + 5] << 8) | ((uint32_t) f[i + 2] << 16) |
                  ((uint32_t) f[i + 3] << 24));
-          v = (reg->size == NIBE_S32) ? scale((int32_t) u, reg->factor)
+          v = (reg->size == HP_S32) ? scale((int32_t) u, reg->factor)
                                       : (reg->factor ? (float) u / reg->factor : (float) u);
         }
         i += need;
@@ -275,7 +275,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     if (f[3] == 0x63) {
       if (passive_) return;
       uint8_t r[6] = {0xC0, 0x60, 0x02, 0x63, 0x00, 0x00};
-      r[5] = calc_crc_c0(r);  // == 0xC1, matches backend.js:283
+      r[5] = calc_crc_c0_nibe(r);  // == 0xC1, matches backend.js:283
       tx_(r, 6);
       return;
     }
@@ -284,7 +284,7 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
       const uint8_t ver[7] = {0xC0, 0xEE, 0x03, 0xEE, 0x03, 0x01, 0x00};
       uint8_t r[7];
       memcpy(r, ver, 7);
-      r[6] = calc_crc_c0(r);  // == 0xC1, matches backend.js:293
+      r[6] = calc_crc_c0_nibe(r);  // == 0xC1, matches backend.js:293
       tx_(r, 7);
       return;
     }
@@ -293,10 +293,10 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     if (!passive_) send_ack_();
   }
 }
-void NibeComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
+void HeatpumpComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
   for (uint16_t a : addrs) ensure_polled(a);
 }
-void NibeComponent::ensure_polled(uint16_t addr) {
+void HeatpumpComponent::ensure_polled(uint16_t addr) {
   uint8_t lo = addr & 0xFF, hi = addr >> 8;
   size_t laps = reads_.size();  // ponytail: queue has no iterators, rotate like on_frame_
   while (laps-- > 0) {
@@ -305,10 +305,10 @@ void NibeComponent::ensure_polled(uint16_t addr) {
     reads_.push(q);
   }
   uint8_t o[6] = {0xC0, 0x69, 0x02, lo, hi, 0};
-  o[5] = calc_crc_c0(o);
+  o[5] = calc_crc_c0_nibe(o);
   reads_.emplace(o, o + 6);
 }
-void NibeComponent::on_value(uint16_t addr, float v) {
+void HeatpumpComponent::on_value(uint16_t addr, float v) {
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)
@@ -317,26 +317,26 @@ void NibeComponent::on_value(uint16_t addr, float v) {
     if (sw->get_register() == addr) sw->publish_state(v != 0);
   for (auto *sel : selects_)
     if (sel->get_register() == addr) {
-      const NibeMeta *meta = nullptr;
-      for (uint16_t k = 0; k < NIBE_META_N; k++)
-        if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
+      const HpMeta *meta = nullptr;
+      for (uint16_t k = 0; k < HP_META_N; k++)
+        if (HP_META[k].addr == addr) { meta = &HP_META[k]; break; }
       float f = (meta != nullptr && meta->factor) ? (float) meta->factor : 1.0f;
       sel->publish_raw((int32_t) std::lround(v * f));
     }
 }
-void NibeSelect::set_labels(const std::vector<std::string> &labels) {
+void HeatpumpSelect::set_labels(const std::vector<std::string> &labels) {
   labels_ = labels;  // ponytail: fill before set_options; realloc would dangle traits pointers
   esphome::FixedVector<const char *> opts;
   opts.init(labels_.size());
   for (auto &l : labels_) opts.push_back(l.c_str());
   this->traits.set_options(opts);
 }
-void NibeSelect::publish_raw(int32_t raw) {
+void HeatpumpSelect::publish_raw(int32_t raw) {
   for (size_t i = 0; i < raws_.size(); i++)
     if (raws_[i] == raw) { publish_state(i); return; }
   // unknown raws skipped
 }
-void NibeSelect::control(const std::string &value) {
+void HeatpumpSelect::control(const std::string &value) {
   if (parent_ == nullptr) return;
   auto idx = this->index_of(value);
   if (idx.has_value() && idx.value() < raws_.size()) {
@@ -344,18 +344,18 @@ void NibeSelect::control(const std::string &value) {
     publish_state(value);
   }
 }
-void NibeSwitch::write_state(bool state) {
+void HeatpumpSwitch::write_state(bool state) {
   if (parent_ == nullptr) return;
   parent_->queue_write(addr_, state ? 1 : 0);
   publish_state(state);
 }
-void NibeNumber::control(float value) {
+void HeatpumpNumber::control(float value) {
   if (parent_ == nullptr) return;
   float v = value;
   int32_t raw;
-  const NibeMeta *reg = nullptr;
-  for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
-    if (NIBE_META[k].addr == addr_) { reg = &NIBE_META[k]; break; }
+  const HpMeta *reg = nullptr;
+  for (uint16_t k = 0; k < HP_META_N; k++)  // ponytail: linear scan, catalog-wide
+    if (HP_META[k].addr == addr_) { reg = &HP_META[k]; break; }
   if (reg != nullptr && reg->factor) {
     raw = (int32_t) std::lround(v * reg->factor);
     if (reg->min != 0 || reg->max != 0) {  // clamp to merged R/W range
@@ -373,10 +373,10 @@ void NibeNumber::control(float value) {
 // so the JSON builder can reuse base_name_for + catalog tables directly.
 #if defined(USE_NETWORK) && !defined(USE_ZEPHYR)
 // ponytail: dependency-free page; fetch JSON, render checkboxes, POST addrs CSV back.
-static const char NIBE_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Nibe registers</title>
+static const char HP_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Heat pump registers</title>
 <style>body{font-family:sans-serif;max-width:60em;margin:1em auto}li{list-style:none}.k{color:#888;font-size:.8em}</style>
-</head><body><h1>Nibe register picker</h1><p id="note"></p>
+</head><body><h1>Heat pump register picker</h1><p id="note"></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
@@ -392,13 +392,13 @@ L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||Stri
 fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
 N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model;render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
-fetch('/nibe/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+fetch('/heatpump/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
 M.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()})
 .catch(e=>M.textContent='Save failed: '+e);};
 Q.oninput=render;E.onchange=render;
 </script></body></html>)HTML";
-bool NibePickerHandler::canHandle(AsyncWebServerRequest *request) const {
+bool HeatpumpPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #ifdef USE_ESP32
   char url_buf[AsyncWebServerRequest::URL_BUF_SIZE];
   StringRef url = request->url_to(url_buf);
@@ -406,10 +406,10 @@ bool NibePickerHandler::canHandle(AsyncWebServerRequest *request) const {
   const auto &url = request->url();
 #endif
   auto m = request->method();
-  return (m == HTTP_GET && url == ESPHOME_F("/nibe/registers")) ||
-         (m == HTTP_POST && url == ESPHOME_F("/nibe/registers/save"));
+  return (m == HTTP_GET && url == ESPHOME_F("/heatpump/registers")) ||
+         (m == HTTP_POST && url == ESPHOME_F("/heatpump/registers/save"));
 }
-void NibePickerHandler::handleRequest(AsyncWebServerRequest *request) {
+void HeatpumpPickerHandler::handleRequest(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
     this->handle_save_(request);
     return;
@@ -418,7 +418,7 @@ void NibePickerHandler::handleRequest(AsyncWebServerRequest *request) {
     request->send(200, "application/json", this->list_json_().c_str());
     return;
   }
-  request->send(200, "text/html", NIBE_PICKER_HTML);
+  request->send(200, "text/html", HP_PICKER_HTML);
 }
 static void picker_esc_(std::string &o, const char *s) {
   for (; *s; s++) {
@@ -431,18 +431,18 @@ static void picker_esc_(std::string &o, const char *s) {
     else o += c;
   }
 }
-std::string NibePickerHandler::list_json_() const {
-  static const uint16_t TITLES_N = sizeof(NIBE_TITLES) / sizeof(NibeTitle);  // no NIBE_TITLES_N in catalog.h
-  const uint16_t *addrs = NIBE_DEFAULTS;
-  uint16_t n = NIBE_DEFAULTS_N;
+std::string HeatpumpPickerHandler::list_json_() const {
+  static const uint16_t TITLES_N = sizeof(HP_TITLES) / sizeof(HpTitle);  // no HP_TITLES_N in catalog.h
+  const uint16_t *addrs = HP_DEFAULTS;
+  uint16_t n = HP_DEFAULTS_N;
   bool have_model = false;
   const std::string &model = this->parent_->get_model();
   if (!model.empty())
-    for (uint8_t i = 0; i < NIBE_MODELS_N; i++)
-      if (model == NIBE_MODELS[i].name) { addrs = NIBE_MODELS[i].addrs; n = NIBE_MODELS[i].n; have_model = true; break; }
-  NibeSelection sel{};
-  const uint16_t *cur = NIBE_DEFAULTS;  // effective set mirrors create_entities: saved, else defaults
-  uint16_t cn = NIBE_DEFAULTS_N;
+    for (uint8_t i = 0; i < HP_MODELS_N; i++)
+      if (model == HP_MODELS[i].name) { addrs = HP_MODELS[i].addrs; n = HP_MODELS[i].n; have_model = true; break; }
+  HeatpumpSelection sel{};
+  const uint16_t *cur = HP_DEFAULTS;  // effective set mirrors create_entities: saved, else defaults
+  uint16_t cn = HP_DEFAULTS_N;
   if (this->parent_->load_selection(&sel)) { cur = sel.addrs; cn = sel.count; }
   static const char *KINDS[] = {"sensor", "number", "switch", "select"};
   std::string o = "{\"model\":";
@@ -458,22 +458,22 @@ std::string NibePickerHandler::list_json_() const {
   char num[8];
   for (uint16_t i = 0; i < n; i++) {
     uint16_t addr = addrs[i];
-    const NibeMeta *meta = nullptr;
-    for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
-      if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
+    const HpMeta *meta = nullptr;
+    for (uint16_t k = 0; k < HP_META_N; k++)  // ponytail: linear scan, catalog-wide
+      if (HP_META[k].addr == addr) { meta = &HP_META[k]; break; }
     if (meta == nullptr) continue;
-    const NibeTitle *te = nullptr;
+    const HpTitle *te = nullptr;
     const char *title = base_name_for(addr);  // HA-identical display names (Task 3 override table)
     for (uint16_t t = 0; t < TITLES_N; t++)
-      if (NIBE_TITLES[t].addr == addr) {
-        if (title == nullptr) title = NIBE_TITLES[t].title;
-        te = &NIBE_TITLES[t];
+      if (HP_TITLES[t].addr == addr) {
+        if (title == nullptr) title = HP_TITLES[t].title;
+        te = &HP_TITLES[t];
         break;
       }
     if (title == nullptr) continue;
-    const NibeHint *hint = nullptr;
-    for (uint8_t k = 0; k < NIBE_HINTS_N; k++)
-      if (NIBE_HINTS[k].addr == addr) { hint = &NIBE_HINTS[k]; break; }
+    const HpHint *hint = nullptr;
+    for (uint8_t k = 0; k < HP_HINTS_N; k++)
+      if (HP_HINTS[k].addr == addr) { hint = &HP_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
     if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
     bool en = false;
@@ -497,9 +497,9 @@ std::string NibePickerHandler::list_json_() const {
   o += "]}";
   return o;
 }
-void NibePickerHandler::handle_save_(AsyncWebServerRequest *request) {
+void HeatpumpPickerHandler::handle_save_(AsyncWebServerRequest *request) {
   std::string s = request->hasArg("addrs") ? request->arg("addrs").c_str() : std::string();
-  uint16_t addrs[NIBE_MAX_SELECTION];
+  uint16_t addrs[HP_MAX_SELECTION];
   uint16_t count = 0;
   std::string err;
   for (size_t i = 0; i <= s.size();) {
@@ -512,16 +512,16 @@ void NibePickerHandler::handle_save_(AsyncWebServerRequest *request) {
     long v = strtol(tok.c_str(), &end, 10);
     if (end == tok.c_str() || *end != '\0' || v <= 0 || v > 65535) { err = "bad addr '" + tok + "'"; break; }
     bool known = false;
-    for (uint16_t k = 0; k < NIBE_META_N; k++)
-      if (NIBE_META[k].addr == (uint16_t) v) { known = true; break; }
+    for (uint16_t k = 0; k < HP_META_N; k++)
+      if (HP_META[k].addr == (uint16_t) v) { known = true; break; }
     if (!known) { err = "unknown register " + tok; break; }
     bool dupe = false;  // ponytail: repeats must not consume cap slots or persist twice
     for (uint16_t k = 0; k < count; k++)
       if (addrs[k] == (uint16_t) v) { dupe = true; break; }
     if (dupe) continue;
-    if (count >= NIBE_MAX_SELECTION) {
+    if (count >= HP_MAX_SELECTION) {
       char m[32];
-      snprintf(m, sizeof(m), "too many (max %u)", NIBE_MAX_SELECTION);
+      snprintf(m, sizeof(m), "too many (max %u)", HP_MAX_SELECTION);
       err = m;
       break;
     }
@@ -538,5 +538,5 @@ void NibePickerHandler::handle_save_(AsyncWebServerRequest *request) {
   request->send(200, "text/plain", "saved,reboot");
 }
 #endif  // USE_NETWORK && !USE_ZEPHYR
-}  // namespace nibe
+}  // namespace heatpump
 }  // namespace esphome

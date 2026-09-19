@@ -1,4 +1,4 @@
-// components/nibe/picker.h — runtime register picker web UI (Task 4).
+// components/heatpump/picker.h — runtime register picker web UI (Task 4).
 #pragma once
 #include "esphome/core/defines.h"
 #if defined(USE_NETWORK) && !defined(USE_ZEPHYR)
@@ -6,11 +6,11 @@
 #include "esphome/core/component.h"
 #include <string>
 namespace esphome {
-namespace nibe {
-class NibeComponent;
-class NibePickerHandler final : public AsyncWebHandler, public Component {
+namespace heatpump {
+class HeatpumpComponent;
+class HeatpumpPickerHandler final : public AsyncWebHandler, public Component {
  public:
-  NibePickerHandler(web_server_base::WebServerBase *base, NibeComponent *parent)
+  HeatpumpPickerHandler(web_server_base::WebServerBase *base, HeatpumpComponent *parent)
       : base_(base), parent_(parent) {}
   bool canHandle(AsyncWebServerRequest *request) const override;
   void handleRequest(AsyncWebServerRequest *request) override;
@@ -23,8 +23,8 @@ class NibePickerHandler final : public AsyncWebHandler, public Component {
   std::string list_json_() const;
   void handle_save_(AsyncWebServerRequest *request);
   web_server_base::WebServerBase *base_;
-  NibeComponent *parent_;
+  HeatpumpComponent *parent_;
 };
-}  // namespace nibe
+}  // namespace heatpump
 }  // namespace esphome
 #endif  // USE_NETWORK && !USE_ZEPHYR

@@ -13,8 +13,8 @@ _number.new_number = AsyncMock()
 _comps.sensor = _sensor
 _comps.number = _number
 
-from components.nibe import sensor as hp_sensor  # noqa: E402
-from components.nibe import number as hp_number  # noqa: E402
+from components.heatpump import sensor as hp_sensor  # noqa: E402
+from components.heatpump import number as hp_number  # noqa: E402
 
 
 def _run(coro):
@@ -51,10 +51,10 @@ def test_number_to_code_wiring():
 
 def test_sensor_schema_rejects_unknown_register_warning():
     import os
-    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "sensor.py")).read()
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "sensor.py")).read()
     assert "is_known" in src
 
 def test_number_schema_rejects_unknown_register_warning():
     import os
-    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "number.py")).read()
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "number.py")).read()
     assert "is_known" in src

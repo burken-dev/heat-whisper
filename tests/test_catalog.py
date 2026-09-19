@@ -1,8 +1,8 @@
 import os
-from components.nibe.registers import (MAX_SELECTION, DEFAULT_ENABLED, normalize_model,
+from components.heatpump.registers import (MAX_SELECTION, DEFAULT_ENABLED, normalize_model,
     model_registers, object_id_for, entity_kind_for, validate_selection, _by_reg)
 
-MDIR = os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "models")
+MDIR = os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "models")
 
 def _models():
     import json
@@ -49,12 +49,12 @@ def test_validate_selection():
     assert ok is None and "too many" in err
 
 def test_defaults_match_allowlist():
-    from components.nibe.registers import DEFAULT_ALLOWLIST
+    from components.heatpump.registers import DEFAULT_ALLOWLIST
     assert sorted(DEFAULT_ENABLED) == sorted(a for a in DEFAULT_ALLOWLIST if a != 10001) or \
         set(DEFAULT_ENABLED) <= set(DEFAULT_ALLOWLIST)
 
 def test_generate_catalog_header_layout():
-    from components.nibe.registers import generate_catalog_header
+    from components.heatpump.registers import generate_catalog_header
     models = {"F750": [
         {"register": "40004", "factor": 10, "size": "s16", "mode": "R",
          "titel": "BT1 Outdoor Temperature", "unit": "°C", "min": "-500", "max": "500"},
@@ -72,7 +72,7 @@ def test_generate_catalog_header_layout():
     assert "0:Eco;1:Normal" in hdr
 
 def test_generate_catalog_header_unknown_size_falls_back_to_s16():
-    from components.nibe.registers import generate_catalog_header
+    from components.heatpump.registers import generate_catalog_header
     models = {"VVMS320": [
         {"register": "31561", "factor": "1", "size": "", "mode": "R",
          "titel": "Datum periodisk varmvatten", "unit": "", "min": "", "max": ""}]}
