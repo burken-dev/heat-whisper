@@ -19,14 +19,10 @@ nibe:
   # Bring-up order: flash with passive: true first, confirm decode in
   # logs/web_server, then enable TX (passive: false).
   # passive: true
-  # registers: polled register ids. Default is the 10-reg allowlist
-  # (DEFAULT_ALLOWLIST in components/nibe/registers.py). To poll extra
-  # model-specific registers, list them here, e.g.:
-  # registers: [40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 40018]
+  # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
   # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
-  # Polling alone creates NO entity — HA entities come only from the
-  # sensor:/number: entries below (allowlist + your opt-ins, nothing else).
+  # Entities below auto-poll their registers — no separate poll list to keep in sync.
 
 sensor:
   # Anti-spam contract (§4): every entity carries delta/throttle/heartbeat so
@@ -114,7 +110,7 @@ sensor:
   #     - heartbeat: 5min
 
 number:
-  # Writable registers: HA traits (min/max/step, scaled units) + firmware
+  # Writable regs: HA traits (min/max/step, scaled units) + firmware
   # clamps raw writes to the merged NIBE_COMMON min/max before queue_write.
   - platform: nibe
     nibe_id: nibe_bridge
@@ -123,6 +119,72 @@ number:
     min_value: -3000
     max_value: 3000
     step: 10
+
+switch:
+  - platform: template
+    name: "Enable BT1 Outdoor"
+    id: en_40004
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(40004, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(40004, false);' }
+  - platform: template
+    name: "Enable Supply S1"
+    id: en_40008
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(40008, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(40008, false);' }
+  - platform: template
+    name: "Enable Return"
+    id: en_40012
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(40012, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(40012, false);' }
+  - platform: template
+    name: "Enable Hot Water Top"
+    id: en_40013
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(40013, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(40013, false);' }
+  - platform: template
+    name: "Enable Hot Water BT6"
+    id: en_40014
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(40014, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(40014, false);' }
+  - platform: template
+    name: "Enable Calculated Supply"
+    id: en_43009
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(43009, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(43009, false);' }
+  - platform: template
+    name: "Enable Compressor Freq"
+    id: en_43136
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(43136, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(43136, false);' }
+  - platform: template
+    name: "Enable Degree Minutes"
+    id: en_43005
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action: { lambda: 'id(nibe_bridge).set_register_enabled(43005, true);' }
+    turn_off_action: { lambda: 'id(nibe_bridge).set_register_enabled(43005, false);' }
 
 # MQTT opt-in (OFF by default). Add a broker block and each entity above
 # publishes to its single native state topic (<node>/sensor/<name>/state)

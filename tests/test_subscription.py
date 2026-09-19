@@ -47,3 +47,12 @@ def test_number_control_still_queues_when_disabled():
     body = CPP.split("NibeNumber::control")[1].split("}  // namespace")[0]
     assert "queue_write" in body
     assert "disabled_" not in body and "is_enabled" not in body
+import os
+def test_base_yaml_switches_match_entities():
+    import re
+    base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
+    assert "extra_poll" not in base or "registers:" not in base.split("extra_poll")[0].split("nibe:")[-1]
+    assert "registers:" not in base  # manual poll list gone
+    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
+        assert f"set_register_enabled({reg}," in base
+        assert "RESTORE_DEFAULT_ON" in base
