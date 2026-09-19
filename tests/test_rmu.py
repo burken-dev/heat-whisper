@@ -26,7 +26,7 @@ def test_rmu_63_reply_bytes():
 
 
 def test_cpp_handles_rmu_slots():
-    src = open(os.path.join(REPO, "components", "nibe", "nibe.cpp")).read()
+    src = open(os.path.join(REPO, "components", "heatpump", "heatpump.cpp")).read()
     assert "0xEE" in src
     assert "0x60" in src
     assert "0x63" in src
@@ -35,13 +35,13 @@ def test_cpp_handles_rmu_slots():
 
 
 def test_init_has_flow_control_pin():
-    src = open(os.path.join(REPO, "components", "nibe", "__init__.py")).read()
+    src = open(os.path.join(REPO, "components", "heatpump", "__init__.py")).read()
     assert "flow_control_pin" in src
     assert "set_flow_control_pin" in src
 
 
 def test_header_has_flow_control_pin():
-    src = open(os.path.join(REPO, "components", "nibe", "nibe.h")).read()
+    src = open(os.path.join(REPO, "components", "heatpump", "heatpump.h")).read()
     assert "set_flow_control_pin" in src
 
 

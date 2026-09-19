@@ -1,0 +1,6 @@
+{
+  "47041": {"type": "select", "options": [[0, "Eco"], [1, "Normal"], [2, "Luxury"], [4, "Smart"]]},
+  "47371": {"type": "switch"},
+  "47370": {"type": "switch"},
+  "47387": {"type": "switch"}
+}
