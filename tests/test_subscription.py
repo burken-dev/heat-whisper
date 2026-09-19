@@ -47,35 +47,35 @@ def test_number_control_still_queues_when_disabled():
     body = CPP.split("NibeNumber::control")[1].split("}  // namespace")[0]
     assert "queue_write" in body
     assert "disabled_" not in body and "is_enabled" not in body
-import os
-def test_base_yaml_switches_match_entities():
+OLD_ENTITY_REGS = (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
+                 40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043)
+
+def _base_text():
+    return open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
+
+def _base_names_table():
+    # NIBE_BASE_NAMES is the post-base.yaml name authority; extract addr->name.
     import re
-    base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
-    assert "extra_poll" not in base or "registers:" not in base.split("extra_poll")[0].split("nibe:")[-1]
-    assert "registers:" not in base  # manual poll list gone
-    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
-                40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043):
-        assert f"set_register_enabled({reg}," in base
-        assert "RESTORE_DEFAULT_ON" in base
+    cpp = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "nibe.cpp")).read()
+    block = cpp.split("NIBE_BASE_NAMES[] = {", 1)[1].split("};", 1)[0]
+    return {int(a): n for a, n in re.findall(r"\{(\d+),\s*\"([^\"]+)\"\}", block)}
 
-def test_on_boot_reasserts_toggles():
-    base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
-    assert "on_boot" in base
-    boot = base.split("on_boot", 1)[1]
-    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
-                40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043):
-        assert f"set_register_enabled({reg}, id(en_{reg}).state)" in boot
+def test_base_yaml_has_no_static_entities():
+    # Picker contract: per-register sensor/number/switch blocks live in
+    # flash now; base.yaml keeps only infra + the model text_sensor.
+    base = _base_text()
+    assert "platform: nibe" not in base
+    assert "set_register_enabled(" not in base
+    assert "on_boot" not in base
+    assert "RESTORE_DEFAULT_ON" not in base
+    assert "Heat Pump Model" in base
+    assert "picked at runtime" in base
 
-def test_smart_sensors_wired():
-    base = open("packages/base.yaml").read()
-    for reg in (40033, 43144, 43305):
-        assert f"register: {reg}" in base
-        assert f"set_register_enabled({reg}," in base
-        assert f"id(en_{reg}).state" in base
-
-def test_smart_numbers_wired():
-    base = open("packages/base.yaml").read()
-    for reg in (47011, 47007, 47041, 47371, 47370, 47387, 47043):
-        assert f"register: {reg}" in base
-        assert f"set_register_enabled({reg}," in base
-        assert f"id(en_{reg}).state" in base
+def test_factory_covers_old_entity_set():
+    # Factory defaults must cover exactly the old static entity set, with
+    # the old base.yaml names, so HA entity ids carry over.
+    from components.nibe.registers import DEFAULT_ENABLED
+    table = _base_names_table()
+    assert sorted(table) == sorted(OLD_ENTITY_REGS)
+    assert sorted(table) == sorted(DEFAULT_ENABLED)
+    assert len(set(table.values())) == len(table)

@@ -28,12 +28,14 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 
 ## Default entities
 
-From `packages/base.yaml`:
+Factory-created at boot from the flash-stored selection (`Preferences`, survives OTA) — `packages/base.yaml` holds no per-register blocks anymore, only the model text sensor below. Entity types are auto-inferred (R→sensor, R/W→number, curated switches/selects).
 
-Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW. Numbers (writable): 43005 Degree Minutes (-3000…3000, step 10), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C).
+Factory defaults = the previous static set (18 registers): sensors 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW; numbers (writable) 43005 Degree Minutes (-3000…3000, step 10), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C). Names are identical to the old YAML titles, so HA entity ids carry over.
 Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, block 47370=0. Prefer 47011 over raw 43005 DM writes. Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
 
-Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 43144, 43305, 47007, 47011, 47041, 47370, 47371, 47387, 47043`. Poll set = your entities + optional `extra_poll:` — no separate list to sync.
+Unit note: factory entities are unitless — ESPHome 2026.9.0 has no runtime unit setter (units are codegen string-pooled into the `App.register_*` call), so the picker cannot attach them; min/max/step still come from the catalog.
+
+Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 43144, 43305, 47007, 47011, 47041, 47370, 47371, 47387, 47043`. Poll set = enabled selection + optional `extra_poll:` — no separate list to sync.
 
 ## Quick start
 
@@ -76,27 +78,13 @@ nibe:
 
 Migration: delete any existing `nibe: registers: [...]` key — entities auto-poll now; use `extra_poll:` only for entity-less sniffing.
 
-Add an entity (it auto-polls; copy its switch block too if you want a runtime toggle).
-Generate the blocks instead of hand-writing them:
+Pick registers at runtime — no YAML editing, no reflash to change the set:
 
-```bash
-python3 scripts/add_register.py 40033            # sensor + switch + on_boot line
-python3 scripts/add_register.py 43005 --writable # number variant
-```
+1. Open `http://<node>/nibe/registers`, check what to expose (max 50), save, reboot to apply.
+2. The poll cycle slows ~linearly with enabled count — enable only what you need.
+3. The selection is stored in flash and survives OTA; factory defaults are the 18 registers above.
 
-```yaml
-sensor:
-  - platform: nibe
-    nibe_id: nibe_bridge
-    register: 40033   # example opt-in
-    name: "My Register"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-    filters:
-      - delta: 0.1
-      - throttle: 60s
-      - heartbeat: 5min
-```
+Breaking change: the per-register `Enable …` switches and the `esphome.on_boot` re-assert wiring are removed — the picker replaces them. (`scripts/add_register.py` was deleted with the static blocks; nothing referenced it.)
 
 MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "nibe"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
 
