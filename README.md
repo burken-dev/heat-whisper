@@ -30,7 +30,8 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 
 From `packages/base.yaml`:
 
-Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency. Number (writable): 43005 Degree Minutes (-3000…3000, step 10). Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
+Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW. Numbers (writable): 43005 Degree Minutes (-3000…3000, step 10), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C).
+Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, block 47370=0. Prefer 47011 over raw 43005 DM writes. Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
 
 Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001`. Poll set = your entities + optional `extra_poll:` — no separate list to sync.
 

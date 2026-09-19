@@ -53,7 +53,8 @@ def test_base_yaml_switches_match_entities():
     base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
     assert "extra_poll" not in base or "registers:" not in base.split("extra_poll")[0].split("nibe:")[-1]
     assert "registers:" not in base  # manual poll list gone
-    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
+    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
+                40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043):
         assert f"set_register_enabled({reg}," in base
         assert "RESTORE_DEFAULT_ON" in base
 
@@ -61,7 +62,8 @@ def test_on_boot_reasserts_toggles():
     base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
     assert "on_boot" in base
     boot = base.split("on_boot", 1)[1]
-    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005):
+    for reg in (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
+                40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043):
         assert f"set_register_enabled({reg}, id(en_{reg}).state)" in boot
 
 def test_smart_sensors_wired():
