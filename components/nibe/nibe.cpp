@@ -24,6 +24,22 @@ bool NibeComponent::save_selection(const uint16_t *addrs, uint16_t n) {
   ESPPreferenceObject pref = global_preferences->make_preference<NibeSelection>(NIBE_SEL_TYPE, true);
   return pref.save(&s);
 }
+// Post-Task-5 name authority: factory names for the 18 NIBE_DEFAULTS addrs,
+// copied verbatim from packages/base.yaml so HA entity names stay identical.
+// Task 5 deletes the YAML blocks; this table is then the single source.
+static const struct { uint16_t addr; const char *name; } NIBE_BASE_NAMES[] = {
+  {40004, "BT1 Outdoor"}, {40008, "Supply Temp S1"}, {40012, "Return Temp"},
+  {40013, "Hot Water Top BT7"}, {40014, "Hot Water BT6"}, {43009, "Calculated Supply"},
+  {43136, "Compressor Frequency"}, {43005, "Degree Minutes"}, {40033, "Room Temp S1"},
+  {43144, "Compressor Energy Total"}, {43305, "Compressor Energy HW"}, {47011, "Heat Offset S1"},
+  {47007, "Heat Curve S1"}, {47041, "Hot Water Comfort Mode"}, {47371, "Allow Heating"},
+  {47370, "Allow Additive Heating"}, {47387, "Hot Water Production"}, {47043, "Hot Water Luxury Start Temp"},
+};
+static const char *base_name_for(uint16_t addr) {
+  for (uint8_t i = 0; i < sizeof(NIBE_BASE_NAMES) / sizeof(NIBE_BASE_NAMES[0]); i++)
+    if (NIBE_BASE_NAMES[i].addr == addr) return NIBE_BASE_NAMES[i].name;
+  return nullptr;
+}
 // Parse hint opts "raw:label;raw:label" (labels carry \" and \\ escapes from _esc).
 static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector<std::string> *labels) {
   for (const char *p = opts; *p;) {
@@ -49,19 +65,20 @@ void NibeComponent::create_entities() {
     n = sel.count;
     if (n) memcpy(addrs, sel.addrs, n * sizeof(uint16_t));
   } else {
-    n = NIBE_DEFAULTS_N;
+    n = std::min(NIBE_DEFAULTS_N, NIBE_MAX_SELECTION);
     memcpy(addrs, NIBE_DEFAULTS, n * sizeof(uint16_t));
   }
   std::vector<uint32_t> used_hashes;  // catalog titles collide across models; skip dupes
   for (uint16_t i = 0; i < n; i++) {
     uint16_t addr = addrs[i];
     const NibeMeta *meta = nullptr;
-    uint16_t mi = 0;
-    for (; mi < NIBE_META_N; mi++)  // ponytail: linear scan, same as decode loop
-      if (NIBE_META[mi].addr == addr) { meta = &NIBE_META[mi]; break; }
+    for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, same as decode loop
+      if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
     if (meta == nullptr) { ESP_LOGW("nibe", "Skipping unknown register %u (map updated after save?)", addr); continue; }
-    // NIBE_TITLES parallels NIBE_META (same sorted addr list in generate_catalog_header).
-    const char *title = (mi < TITLES_N && NIBE_TITLES[mi].addr == addr) ? NIBE_TITLES[mi].title : nullptr;
+    const char *title = base_name_for(addr);  // post-Task-5 name authority; catalog title otherwise
+    if (title == nullptr)
+      for (uint16_t t = 0; t < TITLES_N; t++)
+        if (NIBE_TITLES[t].addr == addr) { title = NIBE_TITLES[t].title; break; }
     if (title == nullptr) { ESP_LOGW("nibe", "Skipping register %u without catalog title", addr); continue; }
     // ponytail: canonical hash codegen passes to App.register_* (helpers.h),
     // not a hand mirror of object_id_for.
@@ -203,9 +220,9 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
-        const NibeReg *reg = nullptr;
-        for (uint16_t k = 0; k < NIBE_COMMON_N; k++)  // ponytail: linear scan, table is ~10 entries
-          if (NIBE_COMMON[k].addr == addr) { reg = &NIBE_COMMON[k]; break; }
+        const NibeMeta *reg = nullptr;
+        for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
+          if (NIBE_META[k].addr == addr) { reg = &NIBE_META[k]; break; }
         if (reg == nullptr) { i += 4; continue; }
         bool wide = (reg->size == NIBE_U32 || reg->size == NIBE_S32);
         uint8_t need = wide ? (f[3] == 0x68 ? 8 : 6) : 4;
@@ -327,9 +344,9 @@ void NibeNumber::control(float value) {
   if (parent_ == nullptr) return;
   float v = value;
   int32_t raw;
-  const NibeReg *reg = nullptr;
-  for (uint16_t k = 0; k < NIBE_COMMON_N; k++)  // ponytail: linear scan, table is ~10 entries
-    if (NIBE_COMMON[k].addr == addr_) { reg = &NIBE_COMMON[k]; break; }
+  const NibeMeta *reg = nullptr;
+  for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
+    if (NIBE_META[k].addr == addr_) { reg = &NIBE_META[k]; break; }
   if (reg != nullptr && reg->factor) {
     raw = (int32_t) std::lround(v * reg->factor);
     if (reg->min != 0 || reg->max != 0) {  // clamp to merged R/W range
