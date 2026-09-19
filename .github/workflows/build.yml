@@ -23,15 +23,16 @@ jobs:
       - run: esphome config heatwhisper_pico_w.yaml
       - run: esphome compile heatwhisper_esp32.yaml
       - run: esphome compile heatwhisper_pico_w.yaml
+      - run: |
+          mkdir -p fw
+          cp .esphome/build/heat-whisper/build/firmware.factory.bin fw/
+          cp .esphome/build/heat-whisper/build/firmware.ota.bin fw/
+          cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.bin fw/
+          cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.uf2 fw/
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: |
-            .esphome/build/heat-whisper/build/firmware.factory.bin
-            .esphome/build/heat-whisper/build/firmware.ota.bin
-            .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.bin
-            .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.uf2
-          if-no-files-found: error
+          path: fw/
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
