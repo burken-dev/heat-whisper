@@ -64,3 +64,51 @@ def is_known(addr: int, models: dict) -> bool:
             if r.get("register") == want:
                 return True
     return False
+
+import json as _json
+MAX_SELECTION = 50
+DEFAULT_ENABLED = [40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
+                   40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043]
+
+def load_hints(path):
+    with open(path) as fh:
+        return _json.load(fh)
+
+def normalize_model(name):
+    out = "".join(c for c in (name or "").upper() if c.isalnum())
+    return out
+
+def model_registers(models, model_name):
+    want = normalize_model(model_name)
+    for key in sorted(models):
+        if normalize_model(key) == want:
+            return sorted({int(r["register"]) for r in models[key]})
+    return []
+
+def object_id_for(title):
+    out = []
+    for c in title.lower().replace(" ", "_"):
+        if c.isalnum() or c == "_":
+            out.append(c)
+    return "".join(out).strip("_")
+
+def entity_kind_for(addr, by_reg, hints):
+    h = hints.get(str(addr))
+    if h is not None:
+        return h["type"], h.get("options", [])
+    rw = (by_reg.get(str(addr)) or {}).get("mode") == "R/W"
+    return ("number" if rw else "sensor"), []
+
+def validate_selection(addrs, models):
+    seen, clean = set(), []
+    for a in addrs:
+        a = int(a)
+        if a in seen:
+            continue
+        if not is_known(a, models):
+            return None, f"unknown register {a}"
+        seen.add(a)
+        clean.append(a)
+    if len(clean) > MAX_SELECTION:
+        return None, f"too many registers ({len(clean)} > {MAX_SELECTION})"
+    return clean, ""
