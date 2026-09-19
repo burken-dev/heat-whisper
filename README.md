@@ -1,16 +1,16 @@
-# Nibe Bridge
+# Heat Pump Bridge
 
 ESPHome bridge between a Nibe F-series heat pump (RS485 master) and Home Assistant. Active slave: answers pump polls, decodes registers, queues writes into poll slots. No control logic on-device — telemetry only.
 
 Native HA API is primary. MQTT is opt-in only.
 
-Boards: ESP32 (`nibe_esp32.yaml`) and Raspberry Pi Pico W (`nibe_pico_w.yaml`). Thin wrappers over `packages/{base,esp32_base,pico_w_base}.yaml` (pins/baud only). Protocol + register maps (`components/nibe/models/*.json`, MIT, see `models/LICENSE`) come from `reference-project/` (NibePi Node.js) — used as reference only, not ported.
+Boards: ESP32 (`heatpump_esp32.yaml`) and Raspberry Pi Pico W (`heatpump_pico_w.yaml`). Thin wrappers over `packages/{base,esp32_base,pico_w_base}.yaml` (pins/baud only). Protocol + register maps (`components/heatpump/models/*.json`, MIT, see `models/LICENSE`) come from `reference-project/` (NibePi Node.js) — used as reference only, not ported.
 
 ## How it works
 
 - `loop()` drains UART non-blocking, scans for `0x5C` frames, XOR checksum, NACK (`0x15`) on fail. Handles `0x5C`-escape (double-`0x5C` squeeze).
 - Routing: read token `0x69` → send next queued `C0 69 02 lo hi CRC` or ACK; write token `0x6B` → send one queued `C0 6B 06 …` or ACK; data `0x68/0x6A/0x62` → decode + publish + ACK; `0x6D` announcement → model auto-detect; RMU `0x19–0x1C` slots (`0x60/0x63/0xEE`) → ACK / fixed version reply. Never transmits outside a poll slot.
-- Codegen (`components/nibe/__init__.py` + `registers.py`): at build time merges model JSONs into `catalog.h` (`NIBE_META`/`NIBE_TITLES`/`NIBE_MODELS` struct arrays). No runtime JSON on MCU. Unknown model → defaults only; unknown addr → skip; corrupt values (outside min/max) → drop.
+- Codegen (`components/heatpump/__init__.py` + `registers.py`): at build time merges model JSONs into `catalog.h` (`HP_META`/`HP_TITLES`/`HP_MODELS` struct arrays). No runtime JSON on MCU. Unknown model → defaults only; unknown addr → skip; corrupt values (outside min/max) → drop.
 - Writes: `number` → clamp raw to merged R/W min/max → `queue_write` → next `0x6B` slot. RMU-range writes (addr < 20000) are dropped.
 - Anti-spam: every sensor carries `delta / throttle / heartbeat` filters. Polling alone creates no entity — only `sensor:`/`number:` entries publish.
 
@@ -21,7 +21,7 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 | Board | TX | RX | Notes |
 |---|---|---|---|
 | ESP32 (`esp32dev`) | GPIO17 | GPIO16 | Flash via web flasher (`index.html` + `manifest.json`, GitHub Pages) or `esphome` |
-| Pico W (`rpipicow`) | GPIO4 | GPIO5 | Flash `nibe_pico_w.uf2` (release) manually via USB mass-storage (BOOTSEL) |
+| Pico W (`rpipicow`) | GPIO4 | GPIO5 | Flash `heatpump_pico_w.uf2` (release) manually via USB mass-storage (BOOTSEL) |
 
 - `flow_control_pin` (e.g. GPIO18): optional RS485 auto-direction pin. Absent = auto-direction transceiver.
 - `logger: baud_rate: 0` — logger kept off UART pins (see `packages/base.yaml`).
@@ -48,7 +48,7 @@ cp secrets.yaml.example secrets.yaml
 # secrets.yaml
 wifi_ssid: "YOUR_WIFI"
 wifi_password: "YOUR_PASSWORD"
-ap_password: "nibebridge01"   # fallback AP, min 8 chars — change it
+ap_password: "heatpumpbridge01"   # fallback AP, min 8 chars — change it
 ota_password: "CHANGE_ME_OTA"
 web_password: "CHANGE_ME_WEB" # web_server :80, user admin
 api_key: "BASE64_32_BYTES"    # generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
@@ -59,17 +59,17 @@ api_key: "BASE64_32_BYTES"    # generate: python3 -c "import secrets,base64; pri
 
 Bring-up (recommended — verify decode before transmitting):
 
-1. Set `passive: true` under `nibe:` in `packages/base.yaml`.
-2. Flash: `esphome run nibe_esp32.yaml` (or `nibe_pico_w.yaml`), or the web flasher (`index.html`) for ESP32 / UF2 drop for Pico W.
-3. Confirm decoded values in logs / `web_server` (port 80). Fallback AP `Nibe-Bridge` + captive portal if Wi-Fi fails.
+1. Set `passive: true` under `heatpump:` in `packages/base.yaml`.
+2. Flash: `esphome run heatpump_esp32.yaml` (or `heatpump_pico_w.yaml`), or the web flasher (`index.html`) for ESP32 / UF2 drop for Pico W.
+3. Confirm decoded values in logs / `web_server` (port 80). Fallback AP `Heatpump-Bridge` + captive portal if Wi-Fi fails.
 4. Set `passive: false` (or remove), re-flash. Bridge now ACKs and answers poll slots.
 
 ## Configuration
 
 ```yaml
-nibe:
-  id: nibe_bridge
-  uart_id: nibe_uart
+heatpump:
+  id: heatpump_bridge
+  uart_id: heatpump_uart
   # passive: true          # decode-only bring-up
   # slave_address: 0x19    # default RMU S1 (0x1A-0x1C = S2-S4, 0x20 = Modbus40 alt)
   # flow_control_pin: GPIO18
@@ -78,26 +78,28 @@ nibe:
 
 Migration: delete any existing `nibe: registers: [...]` key — entities auto-poll now; use `extra_poll:` only for entity-less sniffing.
 
+Migration from `nibe:`: replace the `nibe:` block with `heatpump:` (`id: heatpump_bridge`, `uart_id: heatpump_uart`), delete the old key, re-flash. Entity names are unchanged; the MQTT topic prefix, fallback AP (`Heatpump-Bridge`), picker URL (`/heatpump/registers`) and release filenames change. Saved register selections survive (NVS key unchanged).
+
 Pick registers at runtime — no YAML editing, no reflash to change the set:
 
-1. Open `http://<node>/nibe/registers`, check what to expose (max 50), save, reboot to apply.
+1. Open `http://<node>/heatpump/registers`, check what to expose (max 50), save, reboot to apply.
 2. The poll cycle slows ~linearly with enabled count — enable only what you need.
 3. The selection is stored in flash and survives OTA; factory defaults are the 18 registers above.
 
 Breaking change: the per-register `Enable …` switches and the `esphome.on_boot` re-assert wiring are removed — the picker replaces them. (`scripts/add_register.py` was deleted with the static blocks; nothing referenced it.)
 
-MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "nibe"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
+MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "heatpump"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
 
 ## Build / test / release
 
 ```bash
 python -m pytest tests/ -v          # host tests (decode, registers, entities, RMU)
-esphome config nibe_esp32.yaml      # validate
-esphome compile nibe_esp32.yaml
-esphome compile nibe_pico_w.yaml
+esphome config heatpump_esp32.yaml      # validate
+esphome compile heatpump_esp32.yaml
+esphome compile heatpump_pico_w.yaml
 ```
 
-CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags (`nibe_esp32.factory/ota.bin`, `nibe_pico_w.bin/uf2`) attached to GitHub release + deployed to GitHub Pages (web flasher).
+CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags (`heatpump_esp32.factory/ota.bin`, `heatpump_pico_w.bin/uf2`) attached to GitHub release + deployed to GitHub Pages (web flasher).
 
 ## Troubleshooting
 
@@ -110,4 +112,4 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both
 
 S-series Modbus-TCP, price/weather/curve logic, runtime JSON, per-model hand YAML.
 
-License: MIT. Register maps vendored under their own MIT license (`components/nibe/models/LICENSE`).
+License: MIT. Register maps vendored under their own MIT license (`components/heatpump/models/LICENSE`).

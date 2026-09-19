@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nibe Bridge — Flash</title>
+<title>Heat Pump Bridge — Flash</title>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 <style>body{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem}code{background:#f0f0f0;padding:0 .3em}</style>
 </head>
 <body>
-<h1>Nibe Bridge — Flash</h1>
+<h1>Heat Pump Bridge — Flash</h1>
 <h2>ESP32 (WebSerial: Chrome/Edge)</h2>
-<p>Plug in via USB, click Install, pick the port. Use <code>index.html</code> from <code>https://&lt;user&gt;.github.io/nibe-bridge/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost).</p>
+<p>Plug in via USB, click Install, pick the port. Use <code>index.html</code> from <code>https://&lt;user&gt;.github.io/heatpump-bridge/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost).</p>
 <esp-web-tools-button manifest="./manifest.json"></esp-web-tools-button>
 <h2>Pico W (no WebSerial — RP2040 not supported by ESP Web Tools)</h2>
 <ol>
-<li>Download <code>nibe_pico_w.uf2</code> from the latest GitHub Release.</li>
+<li>Download <code>heatpump_pico_w.uf2</code> from the latest GitHub Release.</li>
 <li>Hold BOOTSEL, plug in USB, drop the <code>.uf2</code> onto the mass-storage drive.</li>
 </ol>
-<p>First boot: join Wi-Fi via fallback AP <code>Nibe-Bridge</code> + captive portal, or pre-fill <code>secrets.yaml</code>. Bring-up: flash with <code>passive: true</code> first, confirm decode on <code>web_server</code> :80, then re-flash with TX enabled.</p>
+<p>First boot: join Wi-Fi via fallback AP <code>Heatpump-Bridge</code> + captive portal, or pre-fill <code>secrets.yaml</code>. Bring-up: flash with <code>passive: true</code> first, confirm decode on <code>web_server</code> :80, then re-flash with TX enabled.</p>
 </body>
 </html>

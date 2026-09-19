@@ -3,7 +3,7 @@ esp32:
   framework:
     type: arduino
 uart:
-  id: nibe_uart
+  id: heatpump_uart
   tx_pin: GPIO17
   rx_pin: GPIO16
   baud_rate: 9600
