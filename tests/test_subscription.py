@@ -70,3 +70,10 @@ def test_smart_sensors_wired():
         assert f"register: {reg}" in base
         assert f"set_register_enabled({reg}," in base
         assert f"id(en_{reg}).state" in base
+
+def test_smart_numbers_wired():
+    base = open("packages/base.yaml").read()
+    for reg in (47011, 47007, 47041, 47371, 47370, 47387, 47043):
+        assert f"register: {reg}" in base
+        assert f"set_register_enabled({reg}," in base
+        assert f"id(en_{reg}).state" in base
