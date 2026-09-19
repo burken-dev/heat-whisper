@@ -63,10 +63,10 @@ def test_generate_catalog_header_layout():
     hints = {"47041": {"type": "select", "options": [[0, "Eco"], [1, "Normal"]]},
              "47371": {"type": "switch"}}
     hdr = generate_catalog_header(models, hints)
-    assert "NIBE_META" in hdr and "NIBE_TITLES" in hdr
-    assert "NIBE_MODEL_F750" in hdr and "NIBE_MODELS" in hdr
-    assert "NIBE_DEFAULTS" in hdr and "NIBE_HINTS" in hdr
-    assert "NIBE_MAX_SELECTION = 50" in hdr
+    assert "HP_META" in hdr and "HP_TITLES" in hdr
+    assert "HP_MODEL_F750" in hdr and "HP_MODELS" in hdr
+    assert "HP_DEFAULTS" in hdr and "HP_HINTS" in hdr
+    assert "HP_MAX_SELECTION = 50" in hdr
     assert "{40004,10,3,0,-500,500}" in hdr
     assert "BT1 Outdoor Temperature" in hdr
     assert "0:Eco;1:Normal" in hdr
