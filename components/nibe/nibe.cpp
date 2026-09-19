@@ -1,10 +1,13 @@
 // components/nibe/nibe.cpp (core loop + router + LE decoder)
 #include "nibe.h"
+#include "picker.h"
 #include "registers.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 namespace esphome {
 namespace nibe {
@@ -360,5 +363,159 @@ void NibeNumber::control(float value) {
   parent_->queue_write(addr_, raw);
   publish_state(v);
 }
+// Register picker web UI (Task 4). Implementations live here (not picker.h)
+// so the JSON builder can reuse base_name_for + catalog tables directly.
+#if defined(USE_NETWORK) && !defined(USE_ZEPHYR)
+// ponytail: dependency-free page; fetch JSON, render checkboxes, POST addrs CSV back.
+static const char NIBE_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Nibe registers</title>
+<style>body{font-family:sans-serif;max-width:60em;margin:1em auto}li{list-style:none}.k{color:#888;font-size:.8em}</style>
+</head><body><h1>Nibe register picker</h1><p id="note"></p>
+<p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
+<span id="count"></span></p><ul id="list"></ul>
+<p><button id="save">Save selection</button> <span id="msg"></span></p>
+<script>
+const Q=document.getElementById('q'),E=document.getElementById('eo'),L=document.getElementById('list'),
+C=document.getElementById('count'),N=document.getElementById('note'),M=document.getElementById('msg'),
+S=document.getElementById('save');let regs=[];
+function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
+L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
+.map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+r.t+
+' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
+fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
+N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model;render();});
+S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
+fetch('/nibe/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+body:'addrs='+encodeURIComponent(a)}).then(async r=>{
+M.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()})
+.catch(e=>M.textContent='Save failed: '+e);};
+Q.oninput=render;E.onchange=render;
+</script></body></html>)HTML";
+bool NibePickerHandler::canHandle(AsyncWebServerRequest *request) const {
+#ifdef USE_ESP32
+  char url_buf[AsyncWebServerRequest::URL_BUF_SIZE];
+  StringRef url = request->url_to(url_buf);
+#else
+  const auto &url = request->url();
+#endif
+  auto m = request->method();
+  return (m == HTTP_GET && url == ESPHOME_F("/nibe/registers")) ||
+         (m == HTTP_POST && url == ESPHOME_F("/nibe/registers/save"));
+}
+void NibePickerHandler::handleRequest(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_POST) {
+    this->handle_save_(request);
+    return;
+  }
+  if (request->hasArg("format") && request->arg("format") == "json") {
+    request->send(200, "application/json", this->list_json_().c_str());
+    return;
+  }
+  request->send(200, "text/html", NIBE_PICKER_HTML);
+}
+static void picker_esc_(std::string &o, const char *s) {
+  for (; *s; s++) {
+    if (*s == '"' || *s == '\\') o += '\\';
+    o += *s;
+  }
+}
+std::string NibePickerHandler::list_json_() const {
+  static const uint16_t TITLES_N = sizeof(NIBE_TITLES) / sizeof(NibeTitle);  // no NIBE_TITLES_N in catalog.h
+  const uint16_t *addrs = NIBE_DEFAULTS;
+  uint16_t n = NIBE_DEFAULTS_N;
+  bool have_model = false;
+  const std::string &model = this->parent_->get_model();
+  if (!model.empty())
+    for (uint8_t i = 0; i < NIBE_MODELS_N; i++)
+      if (model == NIBE_MODELS[i].name) { addrs = NIBE_MODELS[i].addrs; n = NIBE_MODELS[i].n; have_model = true; break; }
+  NibeSelection sel{};
+  const uint16_t *cur = NIBE_DEFAULTS;  // effective set mirrors create_entities: saved, else defaults
+  uint16_t cn = NIBE_DEFAULTS_N;
+  if (this->parent_->load_selection(&sel)) { cur = sel.addrs; cn = sel.count; }
+  static const char *KINDS[] = {"sensor", "number", "switch", "select"};
+  std::string o = "{\"model\":";
+  if (have_model) {
+    o += '"';
+    picker_esc_(o, model.c_str());
+    o += '"';
+  } else {
+    o += "null";  // waiting for pump announcement; page renders the notice
+  }
+  o += ",\"addrs\":[";
+  bool first = true;
+  char num[8];
+  for (uint16_t i = 0; i < n; i++) {
+    uint16_t addr = addrs[i];
+    const NibeMeta *meta = nullptr;
+    for (uint16_t k = 0; k < NIBE_META_N; k++)  // ponytail: linear scan, catalog-wide
+      if (NIBE_META[k].addr == addr) { meta = &NIBE_META[k]; break; }
+    if (meta == nullptr) continue;
+    const NibeTitle *te = nullptr;
+    const char *title = base_name_for(addr);  // HA-identical display names (Task 3 override table)
+    for (uint16_t t = 0; t < TITLES_N; t++)
+      if (NIBE_TITLES[t].addr == addr) {
+        if (title == nullptr) title = NIBE_TITLES[t].title;
+        te = &NIBE_TITLES[t];
+        break;
+      }
+    if (title == nullptr) continue;
+    const NibeHint *hint = nullptr;
+    for (uint8_t k = 0; k < NIBE_HINTS_N; k++)
+      if (NIBE_HINTS[k].addr == addr) { hint = &NIBE_HINTS[k]; break; }
+    uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
+    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
+    bool en = false;
+    for (uint16_t c = 0; c < cn; c++)
+      if (cur[c] == addr) { en = true; break; }
+    if (!first) o += ',';
+    first = false;
+    snprintf(num, sizeof(num), "%u", addr);
+    o += "{\"a\":";
+    o += num;
+    o += ",\"t\":\"";
+    picker_esc_(o, title);
+    o += "\",\"u\":\"";
+    if (te != nullptr) picker_esc_(o, te->unit);
+    o += "\",\"kind\":\"";
+    o += KINDS[kind > 3 ? 0 : kind];
+    o += "\",\"en\":";
+    o += en ? '1' : '0';
+    o += '}';
+  }
+  o += "]}";
+  return o;
+}
+void NibePickerHandler::handle_save_(AsyncWebServerRequest *request) {
+  std::string s = request->hasArg("addrs") ? request->arg("addrs").c_str() : std::string();
+  uint16_t addrs[NIBE_MAX_SELECTION];
+  uint16_t count = 0;
+  std::string err;
+  for (size_t i = 0; i <= s.size();) {
+    size_t j = s.find(',', i);
+    if (j == std::string::npos) j = s.size();
+    std::string tok = s.substr(i, j - i);
+    i = j + 1;
+    if (tok.empty()) continue;
+    char *end = nullptr;
+    long v = strtol(tok.c_str(), &end, 10);
+    if (end == tok.c_str() || *end != '\0' || v <= 0 || v > 65535) { err = "bad addr '" + tok + "'"; break; }
+    bool known = false;
+    for (uint16_t k = 0; k < NIBE_META_N; k++)
+      if (NIBE_META[k].addr == (uint16_t) v) { known = true; break; }
+    if (!known) { err = "unknown register " + tok; break; }
+    if (count >= NIBE_MAX_SELECTION) { err = "too many (max 50)"; break; }
+    addrs[count++] = (uint16_t) v;
+  }
+  if (!err.empty()) {
+    request->send(400, "text/plain", err.c_str());
+    return;
+  }
+  if (!this->parent_->save_selection(addrs, count)) {
+    request->send(500, "text/plain", "save failed");
+    return;
+  }
+  request->send(200, "text/plain", "saved,reboot");
+}
+#endif  // USE_NETWORK && !USE_ZEPHYR
 }  // namespace nibe
 }  // namespace esphome
