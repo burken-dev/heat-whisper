@@ -1,4 +1,4 @@
-# components/heatpump/registers.py
+# components/heatwhisper/registers.py
 SIZE_CODES = {"u8": 0, "s8": 1, "u16": 2, "s16": 3, "u32": 4, "s32": 5}
 DEFAULT_ALLOWLIST = [40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001,
                      43144, 43305, 47007, 47011, 47041, 47370, 47371, 47387, 47043]
@@ -95,38 +95,38 @@ def generate_catalog_header(models, hints):
             titles.setdefault(r["register"], (r.get("titel") or f"Register {r['register']}",
                                               (r.get("unit") or "").replace("�", "°")))
     lines = ["#pragma once", '#include <stdint.h>',
-             "struct HpMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };",
-             "struct HpTitle { uint16_t addr; const char *title; const char *unit; };",
-             "struct HpModel { const char *name; const uint16_t *addrs; uint16_t n; };",
-             "struct HpHint { uint16_t addr; uint8_t kind; const char *opts; };"]
+             "struct HwMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };",
+             "struct HwTitle { uint16_t addr; const char *title; const char *unit; };",
+             "struct HwModel { const char *name; const uint16_t *addrs; uint16_t n; };",
+             "struct HwHint { uint16_t addr; uint8_t kind; const char *opts; };"]
     entries = ",".join(
         f"{{{a},{_num(by_reg[str(a)].get('factor', 1))},"
         f"{SIZE_CODES.get(by_reg[str(a)].get('size') or 's16', SIZE_CODES['s16'])},"        f"{1 if by_reg[str(a)].get('mode') == 'R/W' else 0},"
         f"{_num(by_reg[str(a)].get('min', 0))},{_num(by_reg[str(a)].get('max', 0))}}}"
         for a in addrs)
-    lines.append(f"static const HpMeta HP_META[] = {{{entries}}};")
-    lines.append(f"static const uint16_t HP_META_N = {len(addrs)};")
+    lines.append(f"static const HwMeta HW_META[] = {{{entries}}};")
+    lines.append(f"static const uint16_t HW_META_N = {len(addrs)};")
     trows = ",".join(f'{{{a},"{_esc(titles[str(a)][0])}","{_esc(titles[str(a)][1])}"}}' for a in addrs)
-    lines.append(f"static const HpTitle HP_TITLES[] = {{{trows}}};")
+    lines.append(f"static const HwTitle HW_TITLES[] = {{{trows}}};")
     for m, regs in sorted(models.items()):
         want = normalize_model(m)
         lst = sorted({int(r["register"]) for r in regs})
-        lines.append(f"static const uint16_t HP_MODEL_{want}[] = {{{','.join(map(str, lst))}}};")
+        lines.append(f"static const uint16_t HW_MODEL_{want}[] = {{{','.join(map(str, lst))}}};")
     mrows = []
     for m, regs in sorted(models.items()):
         want = normalize_model(m)
         n = len({int(r["register"]) for r in regs})
-        mrows.append(f'{{"{m}",HP_MODEL_{want},{n}}}')
-    lines.append(f"static const HpModel HP_MODELS[] = {{{','.join(mrows)}}};")
-    lines.append(f"static const uint8_t HP_MODELS_N = {len(models)};")
+        mrows.append(f'{{"{m}",HW_MODEL_{want},{n}}}')
+    lines.append(f"static const HwModel HW_MODELS[] = {{{','.join(mrows)}}};")
+    lines.append(f"static const uint8_t HW_MODELS_N = {len(models)};")
     kinds = {"sensor": 0, "number": 1, "switch": 2, "select": 3}
     hrows = []
     for a_str, h in sorted(hints.items(), key=lambda kv: int(kv[0])):
         opts = ";".join(f"{v}:{_esc(l)}" for v, l in h.get("options", []))
         hrows.append(f'{{{a_str},{kinds[h["type"]]},"{opts}"}}')
-    lines.append(f"static const HpHint HP_HINTS[] = {{{','.join(hrows)}}};")
-    lines.append(f"static const uint8_t HP_HINTS_N = {len(hrows)};")
-    lines.append(f"static const uint16_t HP_DEFAULTS[] = {{{','.join(map(str, DEFAULT_ENABLED))}}};")
-    lines.append(f"static const uint8_t HP_DEFAULTS_N = {len(DEFAULT_ENABLED)};")
-    lines.append(f"static const uint8_t HP_MAX_SELECTION = {MAX_SELECTION};")
+    lines.append(f"static const HwHint HW_HINTS[] = {{{','.join(hrows)}}};")
+    lines.append(f"static const uint8_t HW_HINTS_N = {len(hrows)};")
+    lines.append(f"static const uint16_t HW_DEFAULTS[] = {{{','.join(map(str, DEFAULT_ENABLED))}}};")
+    lines.append(f"static const uint8_t HW_DEFAULTS_N = {len(DEFAULT_ENABLED)};")
+    lines.append(f"static const uint8_t HW_MAX_SELECTION = {MAX_SELECTION};")
     return "\n".join(lines) + "\n"

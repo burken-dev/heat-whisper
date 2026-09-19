@@ -1,4 +1,4 @@
-# components/heatpump/__init__.py
+# components/heatwhisper/__init__.py
 import os, json, esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
@@ -6,19 +6,19 @@ from esphome.components import uart, web_server_base
 from .registers import generate_catalog_header, load_hints, MAX_SELECTION
 CODEOWNERS = ["@andreas"]
 AUTO_LOAD = ["sensor", "number", "switch", "select", "web_server_base"]  # boot factory new entities; no YAML platforms required
-heatpump_ns = cg.esphome_ns.namespace("heatpump")
-Heatpump = heatpump_ns.class_("HeatpumpComponent", cg.Component, uart.UARTDevice)
-HeatpumpPickerHandler = heatpump_ns.class_("HeatpumpPickerHandler", cg.Component)
+heatwhisper_ns = cg.esphome_ns.namespace("heatwhisper")
+HeatWhisper = heatwhisper_ns.class_("HeatWhisperComponent", cg.Component, uart.UARTDevice)
+HeatWhisperPickerHandler = heatwhisper_ns.class_("HeatWhisperPickerHandler", cg.Component)
 CONF_EXTRA_POLL = "extra_poll"
 CONF_PICKER_ID = "picker_id"
 CONF_WEB_SERVER_BASE_ID = web_server_base.CONF_WEB_SERVER_BASE_ID  # attr, not submodule import (see tests/conftest.py stubs)
 CONFIG_SCHEMA = cv.Schema({
-    cv.GenerateID(): cv.declare_id(Heatpump),
+    cv.GenerateID(): cv.declare_id(HeatWhisper),
     cv.Optional("slave_address", default=0x19): cv.hex_int,
     cv.Optional(CONF_EXTRA_POLL, default=[]): cv.ensure_list(cv.int_),
     cv.Optional("passive", default=False): cv.boolean,
     cv.Optional("flow_control_pin"): pins.gpio_output_pin_schema,
-    cv.GenerateID(CONF_PICKER_ID): cv.declare_id(HeatpumpPickerHandler),
+    cv.GenerateID(CONF_PICKER_ID): cv.declare_id(HeatWhisperPickerHandler),
     cv.GenerateID(CONF_WEB_SERVER_BASE_ID): cv.use_id(web_server_base.WebServerBase),
 }).extend(uart.UART_DEVICE_SCHEMA)  # provides uart_id (register_uart_device needs it)
 async def to_code(config):

@@ -5,7 +5,7 @@ wifi:
   reboot_timeout: 15min
   power_save_mode: none
   ap:
-    ssid: "Heatpump-Bridge"
+    ssid: "HeatWhisper"
     password: !secret ap_password
 captive_portal:
 web_server:
@@ -23,11 +23,11 @@ safe_mode:
 logger:
   baud_rate: 0
 
-# Heat-pump bridge. Native API is primary; MQTT is opt-in only (see bottom).
-heatpump:
-  id: heatpump_bridge
-  uart_id: heatpump_uart
-  # Registers are now picked at runtime: open http://<node>/heatpump/registers,
+# HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
+heatwhisper:
+  id: heatwhisper_bridge
+  uart_id: heatwhisper_uart
+  # Registers are now picked at runtime: open http://<node>/heatwhisper/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
   # previous 18 entities; stored in flash, survives OTA.
@@ -42,7 +42,7 @@ text_sensor:
   # Autodetected from the pump's 0x6D announcement (empty = not heard yet).
   - platform: template
     name: "Heat Pump Model"
-    lambda: 'return id(heatpump_bridge).get_model();'
+    lambda: 'return id(heatwhisper_bridge).get_model();'
     update_interval: 60s
     entity_category: diagnostic
 
@@ -50,11 +50,11 @@ text_sensor:
 # publishes to its single native state topic (<node>/sensor/<name>/state)
 # automatically — no extra config, and never the reference bridge's
 # /json + /raw triple-topic spam.
-# Custom topic prefix: topic_prefix: "heatpump" (default is <node name>).
+# Custom topic prefix: topic_prefix: "heatwhisper" (default is <node name>).
 # HA discovery is automatic when mqtt: is present; set discovery: false to disable.
 # mqtt:
 #   broker: !secret mqtt_broker
 #   username: !secret mqtt_user
 #   password: !secret mqtt_password
-#   topic_prefix: "heatpump"
+#   topic_prefix: "heatwhisper"
 #   discovery: true

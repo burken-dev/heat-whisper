@@ -1,4 +1,4 @@
-# tests/test_decode.py — host mirrors of HeatpumpComponent::calc_crc_nibe / calc_crc_c0_nibe.
+# tests/test_decode.py — host mirrors of HeatWhisperComponent::calc_crc_nibe / calc_crc_c0_nibe.
 from tests.vectors import READ_40004, CORRUPT, WRITE_EXAMPLE
 
 
@@ -44,7 +44,7 @@ def poll_frame_40004():
     return bytes([0xC0, 0x69, 0x02, lo, hi, c])
 
 def test_poll_frame_40004():
-    # contract for HeatpumpComponent::set_poll_registers: C0 69 02 lo hi CRC
+    # contract for HeatWhisperComponent::set_poll_registers: C0 69 02 lo hi CRC
     assert poll_frame_40004() == bytes([0xC0, 0x69, 0x02, 0x44, 0x9C, 0x73])
     assert calc_crc_c0(poll_frame_40004()) == poll_frame_40004()[5]
 
@@ -56,7 +56,7 @@ ANNOUNCE_F750 = bytes([0x5C, 0x00, 0x20, 0x6D, 0x08, 0x00, 0x01, 0x02,
                        0x46, 0x37, 0x35, 0x30, 0x20, 0x12])
 
 def parse_model_6d(frame: bytes) -> str:
-    # mirror of HeatpumpComponent::on_frame_ 0x6D branch: model bytes at f[8..n-2]
+    # mirror of HeatWhisperComponent::on_frame_ 0x6D branch: model bytes at f[8..n-2]
     raw = frame[8:len(frame) - 1].decode("ascii")
     sp = raw.find(" ")
     if sp != -1:

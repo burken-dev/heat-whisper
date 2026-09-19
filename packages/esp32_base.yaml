@@ -3,7 +3,7 @@ esp32:
   framework:
     type: arduino
 uart:
-  id: heatpump_uart
+  id: heatwhisper_uart
   tx_pin: GPIO17
   rx_pin: GPIO16
   baud_rate: 9600

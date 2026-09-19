@@ -1,8 +1,8 @@
 import os
-from components.heatpump.registers import (MAX_SELECTION, DEFAULT_ENABLED, normalize_model,
+from components.heatwhisper.registers import (MAX_SELECTION, DEFAULT_ENABLED, normalize_model,
     model_registers, object_id_for, entity_kind_for, validate_selection, _by_reg)
 
-MDIR = os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "models")
+MDIR = os.path.join(os.path.dirname(__file__), "..", "components", "heatwhisper", "models")
 
 def _models():
     import json
@@ -49,12 +49,12 @@ def test_validate_selection():
     assert ok is None and "too many" in err
 
 def test_defaults_match_allowlist():
-    from components.heatpump.registers import DEFAULT_ALLOWLIST
+    from components.heatwhisper.registers import DEFAULT_ALLOWLIST
     assert sorted(DEFAULT_ENABLED) == sorted(a for a in DEFAULT_ALLOWLIST if a != 10001) or \
         set(DEFAULT_ENABLED) <= set(DEFAULT_ALLOWLIST)
 
 def test_generate_catalog_header_layout():
-    from components.heatpump.registers import generate_catalog_header
+    from components.heatwhisper.registers import generate_catalog_header
     models = {"F750": [
         {"register": "40004", "factor": 10, "size": "s16", "mode": "R",
          "titel": "BT1 Outdoor Temperature", "unit": "°C", "min": "-500", "max": "500"},
@@ -63,16 +63,16 @@ def test_generate_catalog_header_layout():
     hints = {"47041": {"type": "select", "options": [[0, "Eco"], [1, "Normal"]]},
              "47371": {"type": "switch"}}
     hdr = generate_catalog_header(models, hints)
-    assert "HP_META" in hdr and "HP_TITLES" in hdr
-    assert "HP_MODEL_F750" in hdr and "HP_MODELS" in hdr
-    assert "HP_DEFAULTS" in hdr and "HP_HINTS" in hdr
-    assert "HP_MAX_SELECTION = 50" in hdr
+    assert "HW_META" in hdr and "HW_TITLES" in hdr
+    assert "HW_MODEL_F750" in hdr and "HW_MODELS" in hdr
+    assert "HW_DEFAULTS" in hdr and "HW_HINTS" in hdr
+    assert "HW_MAX_SELECTION = 50" in hdr
     assert "{40004,10,3,0,-500,500}" in hdr
     assert "BT1 Outdoor Temperature" in hdr
     assert "0:Eco;1:Normal" in hdr
 
 def test_generate_catalog_header_unknown_size_falls_back_to_s16():
-    from components.heatpump.registers import generate_catalog_header
+    from components.heatwhisper.registers import generate_catalog_header
     models = {"VVMS320": [
         {"register": "31561", "factor": "1", "size": "", "mode": "R",
          "titel": "Datum periodisk varmvatten", "unit": "", "min": "", "max": ""}]}

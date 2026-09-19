@@ -1,4 +1,4 @@
-// components/heatpump/heatpump.h
+// components/heatwhisper/heatwhisper.h
 #pragma once
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
@@ -15,34 +15,34 @@
 #include <vector>
 // ponytail: must match SIZE_CODES in registers.py
 namespace esphome {
-namespace heatpump {
-enum HpSize : uint8_t { HP_U8 = 0, HP_S8, HP_U16, HP_S16, HP_U32, HP_S32 };
+namespace heatwhisper {
+enum HwSize : uint8_t { HW_U8 = 0, HW_S8, HW_U16, HW_S16, HW_U32, HW_S32 };
 struct WriteRequest { uint16_t addr; int32_t raw; };
-class HeatpumpComponent;  // entities hold a parent pointer only
-class HeatpumpSensor : public esphome::sensor::Sensor, public esphome::Component {
+class HeatWhisperComponent;  // entities hold a parent pointer only
+class HeatWhisperSensor : public esphome::sensor::Sensor, public esphome::Component {
  public:
-  void set_parent(HeatpumpComponent *p) { parent_ = p; }
+  void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void publish_value(float v) { publish_state(v); }
  protected:
-  HeatpumpComponent *parent_{nullptr};
+  HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-class HeatpumpNumber : public esphome::number::Number, public esphome::Component {
+class HeatWhisperNumber : public esphome::number::Number, public esphome::Component {
  public:
-  void set_parent(HeatpumpComponent *p) { parent_ = p; }
+  void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void publish_value(float v) { publish_state(v); }
-  void control(float value) override;  // clamp to HP_META range, queue_write
+  void control(float value) override;  // clamp to HW_META range, queue_write
  protected:
-  HeatpumpComponent *parent_{nullptr};
+  HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-class HeatpumpSelect : public esphome::select::Select, public esphome::Component {
+class HeatWhisperSelect : public esphome::select::Select, public esphome::Component {
  public:
-  void set_parent(HeatpumpComponent *p) { parent_ = p; }
+  void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void set_mapping(const std::vector<int32_t> &raws) { raws_ = raws; }
@@ -50,22 +50,22 @@ class HeatpumpSelect : public esphome::select::Select, public esphome::Component
   void publish_raw(int32_t raw);  // raw->index fan-out; unknown raws skipped
   void control(const std::string &value) override;
  protected:
-  HeatpumpComponent *parent_{nullptr};
+  HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
   std::vector<int32_t> raws_;
   std::vector<std::string> labels_;  // owns option strings; traits hold pointers into these
 };
-class HeatpumpSwitch : public esphome::switch_::Switch, public esphome::Component {
+class HeatWhisperSwitch : public esphome::switch_::Switch, public esphome::Component {
  public:
-  void set_parent(HeatpumpComponent *p) { parent_ = p; }
+  void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void write_state(bool state) override;
  protected:
-  HeatpumpComponent *parent_{nullptr};
+  HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-struct HeatpumpSelection {
+struct HeatWhisperSelection {
   uint32_t version{1};
   uint16_t count{0};
   uint16_t addrs[50];
@@ -73,9 +73,9 @@ struct HeatpumpSelection {
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
 // (verified with host g++); NVS save/load use sizeof consistently so the
 // trailing pad bytes are harmless.
-static_assert(sizeof(HeatpumpSelection{}) == 108, "HeatpumpSelection layout");
-static_assert(50 == HP_MAX_SELECTION, "selection slots match catalog cap");
-class HeatpumpComponent : public esphome::Component, public esphome::uart::UARTDevice {
+static_assert(sizeof(HeatWhisperSelection{}) == 108, "HeatWhisperSelection layout");
+static_assert(50 == HW_MAX_SELECTION, "selection slots match catalog cap");
+class HeatWhisperComponent : public esphome::Component, public esphome::uart::UARTDevice {
   public:
   void set_slave_address(uint8_t a) { slave_ = a; }
   void set_passive(bool p) { passive_ = p; }
@@ -84,15 +84,15 @@ class HeatpumpComponent : public esphome::Component, public esphome::uart::UARTD
   void set_poll_registers(const std::vector<uint16_t> &addrs);
   void ensure_polled(uint16_t addr);
   void queue_write(uint16_t addr, int32_t raw) {
-    if (addr < 20000) { ESP_LOGW("heatpump", "Dropping RMU-range write addr %u", addr); return; }
-    if (writes_.size() >= 4) { ESP_LOGW("heatpump", "Write queue full, dropping oldest"); writes_.pop(); }
+    if (addr < 20000) { ESP_LOGW("heatwhisper", "Dropping RMU-range write addr %u", addr); return; }
+    if (writes_.size() >= 4) { ESP_LOGW("heatwhisper", "Write queue full, dropping oldest"); writes_.pop(); }
     writes_.push({addr, raw});
   }
-  void add_sensor(HeatpumpSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
-  void add_number(HeatpumpNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
-  void add_select(HeatpumpSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
-  void add_switch(HeatpumpSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
-  bool load_selection(HeatpumpSelection *out);
+  void add_sensor(HeatWhisperSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
+  void add_number(HeatWhisperNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
+  void add_select(HeatWhisperSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
+  void add_switch(HeatWhisperSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
+  bool load_selection(HeatWhisperSelection *out);
   bool save_selection(const uint16_t *addrs, uint16_t n);
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
@@ -122,10 +122,10 @@ class HeatpumpComponent : public esphome::Component, public esphome::uart::UARTD
   std::vector<uint8_t> rx_;
   std::queue<WriteRequest> writes_;
   std::queue<std::vector<uint8_t>> reads_;
-  std::vector<HeatpumpSensor *> sensors_;
-  std::vector<HeatpumpNumber *> numbers_;
-  std::vector<HeatpumpSelect *> selects_;
-  std::vector<HeatpumpSwitch *> switches_;
+  std::vector<HeatWhisperSensor *> sensors_;
+  std::vector<HeatWhisperNumber *> numbers_;
+  std::vector<HeatWhisperSelect *> selects_;
+  std::vector<HeatWhisperSwitch *> switches_;
 };
-}  // namespace heatpump
+}  // namespace heatwhisper
 }  // namespace esphome

@@ -16,18 +16,18 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp secrets.yaml.example secrets.yaml
       - run: pip install esphome
-      - run: esphome config heatpump_esp32.yaml
-      - run: esphome config heatpump_pico_w.yaml
-      - run: esphome compile heatpump_esp32.yaml
-      - run: esphome compile heatpump_pico_w.yaml
+      - run: esphome config heatwhisper_esp32.yaml
+      - run: esphome config heatwhisper_pico_w.yaml
+      - run: esphome compile heatwhisper_esp32.yaml
+      - run: esphome compile heatwhisper_pico_w.yaml
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
           path: |
-            .esphome/build/heatpump-bridge/build/firmware.factory.bin
-            .esphome/build/heatpump-bridge/build/firmware.ota.bin
-            .esphome/build/heatpump-bridge-pico/.pioenvs/heatpump-bridge-pico/firmware.bin
-            .esphome/build/heatpump-bridge-pico/.pioenvs/heatpump-bridge-pico/firmware.uf2
+            .esphome/build/heat-whisper/build/firmware.factory.bin
+            .esphome/build/heat-whisper/build/firmware.ota.bin
+            .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.bin
+            .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.uf2
           if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -39,10 +39,10 @@ jobs:
         with: { name: firmware, path: dist }
       # Stable aliases alongside the raw ESPHome outputs (manifest.json + web flasher use these).
       - run: |
-          cp dist/firmware.factory.bin dist/heatpump_esp32.factory.bin
-          cp dist/firmware.ota.bin dist/heatpump_esp32.ota.bin
-          cp dist/firmware.bin dist/heatpump_pico_w.bin
-          cp dist/firmware.uf2 dist/heatpump_pico_w.uf2
+          cp dist/firmware.factory.bin dist/heatwhisper_esp32.factory.bin
+          cp dist/firmware.ota.bin dist/heatwhisper_esp32.ota.bin
+          cp dist/firmware.bin dist/heatwhisper_pico_w.bin
+          cp dist/firmware.uf2 dist/heatwhisper_pico_w.uf2
       - uses: softprops/action-gh-release@v2
         with: { files: dist/** }
   pages:
@@ -58,10 +58,10 @@ jobs:
       - run: |
           mkdir -p public
           cp index.html manifest.json public/
-          cp fw/firmware.factory.bin public/heatpump_esp32.factory.bin
-          cp fw/firmware.ota.bin public/heatpump_esp32.ota.bin
-          cp fw/firmware.bin public/heatpump_pico_w.bin
-          cp fw/firmware.uf2 public/heatpump_pico_w.uf2
+          cp fw/firmware.factory.bin public/heatwhisper_esp32.factory.bin
+          cp fw/firmware.ota.bin public/heatwhisper_esp32.ota.bin
+          cp fw/firmware.bin public/heatwhisper_pico_w.bin
+          cp fw/firmware.uf2 public/heatwhisper_pico_w.uf2
       - uses: actions/upload-pages-artifact@v4
         with: { path: public }
       - id: deployment

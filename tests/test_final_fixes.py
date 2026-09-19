@@ -3,8 +3,8 @@ import os
 from collections import deque
 
 REPO = os.path.join(os.path.dirname(__file__), "..")
-CPP = open(os.path.join(REPO, "components", "heatpump", "heatpump.cpp")).read()
-HDR = open(os.path.join(REPO, "components", "heatpump", "heatpump.h")).read()
+CPP = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")).read()
+HDR = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.h")).read()
 
 
 def calc_crc(data: bytes) -> int:
