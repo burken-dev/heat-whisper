@@ -1,6 +1,6 @@
 # tests/test_registers.py
 import json, os
-from components.nibe.registers import common_and_deltas, generate_header, is_known
+from components.nibe.registers import DEFAULT_ALLOWLIST, common_and_deltas, generate_header, is_known
 def test_common_contains_bt1():
     models = {
         "F750": [{"register": "40004", "factor": 10, "size": "s16", "mode": "R"}],
@@ -60,3 +60,21 @@ def test_init_uses_extra_poll():
     src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "__init__.py")).read()
     assert "extra_poll" in src
     assert 'CONF_REGISTERS = "registers"' not in src
+
+
+def test_smart_allowlist_present():
+    for a in [40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387]:
+        assert a in DEFAULT_ALLOWLIST
+
+
+def test_smart_common_decodable_real_models():
+    import json, os
+    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "models")
+    models = {}
+    for f in sorted(os.listdir(mdir)):
+        if f.endswith(".json"):
+            with open(os.path.join(mdir, f)) as fh:
+                models[f[:-5]] = json.load(fh)
+    common, _ = common_and_deltas(models)
+    for a in ["47011", "47041", "47371", "47370", "47387", "40033"]:
+        assert a in common
