@@ -1,7 +1,7 @@
 // components/nibe/nibe.cpp (core loop + router + LE decoder)
 #include "nibe.h"
 #include "picker.h"
-#include "registers.h"
+#include "esphome/components/sensor/filter.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include <algorithm>
@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 namespace esphome {
 namespace nibe {
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
@@ -94,11 +95,19 @@ void NibeComponent::create_entities() {
     for (uint8_t k = 0; k < NIBE_HINTS_N; k++)
       if (NIBE_HINTS[k].addr == addr) { hint = &NIBE_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
+    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
     if (kind == 0) {
       auto *sen = new NibeSensor();
       sen->set_parent(this);
       sen->set_register(addr);
       sen->set_accuracy_decimals(1);  // ponytail: no runtime unit setter in 2026.9.0; units are codegen-pooled
+      // ponytail: mirrors codegen for `delta: 0.1 / throttle: 60s / heartbeat: 5min`
+      // (sensor/__init__.py: delta_filter_to_code etc.; USE_SENSOR_FILTER via cg.add_define in __init__.py)
+      sen->set_filters({
+        new esphome::sensor::DeltaFilter(0.1f, 0.0f, std::numeric_limits<float>::infinity(), 0.0f),
+        new esphome::sensor::ThrottleFilter(60000),
+        new esphome::sensor::HeartbeatFilter(300000),
+      });
       App.register_sensor(sen, title, hash, 0);
       add_sensor(sen);
     } else if (kind == 1) {
@@ -187,8 +196,6 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
     bool sent = false;
     while (laps-- > 0 && !reads_.empty()) {
       auto r = reads_.front(); reads_.pop();
-      uint16_t a = (r.size() == 6) ? (uint16_t)(r[3] | (r[4] << 8)) : 0;
-      if (r.size() == 6 && !is_enabled(a)) { reads_.push(r); continue; }
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
     if (!sent) send_ack_();
@@ -302,7 +309,6 @@ void NibeComponent::ensure_polled(uint16_t addr) {
   reads_.emplace(o, o + 6);
 }
 void NibeComponent::on_value(uint16_t addr, float v) {
-  if (!is_enabled(addr)) return;
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)
@@ -378,9 +384,10 @@ static const char NIBE_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta c
 const Q=document.getElementById('q'),E=document.getElementById('eo'),L=document.getElementById('list'),
 C=document.getElementById('count'),N=document.getElementById('note'),M=document.getElementById('msg'),
 S=document.getElementById('save');let regs=[];
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
 L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
-.map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+r.t+
+.map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+
 ' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
 fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
 N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model;render();});
@@ -415,8 +422,13 @@ void NibePickerHandler::handleRequest(AsyncWebServerRequest *request) {
 }
 static void picker_esc_(std::string &o, const char *s) {
   for (; *s; s++) {
-    if (*s == '"' || *s == '\\') o += '\\';
-    o += *s;
+    char c = *s;
+    if (c == '"' || c == '\\') { o += '\\'; o += c; }
+    else if (c == '\n') o += "\\n";
+    else if (c == '\r') o += "\\r";
+    else if (c == '\t') o += "\\t";
+    else if ((unsigned char) c < 0x20) { char u[8]; snprintf(u, sizeof(u), "\\u%04X", c); o += u; }
+    else o += c;
   }
 }
 std::string NibePickerHandler::list_json_() const {
@@ -503,7 +515,16 @@ void NibePickerHandler::handle_save_(AsyncWebServerRequest *request) {
     for (uint16_t k = 0; k < NIBE_META_N; k++)
       if (NIBE_META[k].addr == (uint16_t) v) { known = true; break; }
     if (!known) { err = "unknown register " + tok; break; }
-    if (count >= NIBE_MAX_SELECTION) { err = "too many (max 50)"; break; }
+    bool dupe = false;  // ponytail: repeats must not consume cap slots or persist twice
+    for (uint16_t k = 0; k < count; k++)
+      if (addrs[k] == (uint16_t) v) { dupe = true; break; }
+    if (dupe) continue;
+    if (count >= NIBE_MAX_SELECTION) {
+      char m[32];
+      snprintf(m, sizeof(m), "too many (max %u)", NIBE_MAX_SELECTION);
+      err = m;
+      break;
+    }
     addrs[count++] = (uint16_t) v;
   }
   if (!err.empty()) {

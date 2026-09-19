@@ -10,7 +10,7 @@ Boards: ESP32 (`nibe_esp32.yaml`) and Raspberry Pi Pico W (`nibe_pico_w.yaml`). 
 
 - `loop()` drains UART non-blocking, scans for `0x5C` frames, XOR checksum, NACK (`0x15`) on fail. Handles `0x5C`-escape (double-`0x5C` squeeze).
 - Routing: read token `0x69` → send next queued `C0 69 02 lo hi CRC` or ACK; write token `0x6B` → send one queued `C0 6B 06 …` or ACK; data `0x68/0x6A/0x62` → decode + publish + ACK; `0x6D` announcement → model auto-detect; RMU `0x19–0x1C` slots (`0x60/0x63/0xEE`) → ACK / fixed version reply. Never transmits outside a poll slot.
-- Codegen (`components/nibe/__init__.py` + `registers.py`): at build time merges model JSONs into `registers.h` (`NIBE_COMMON` struct array). No runtime JSON on MCU. Unknown model → common table only; unknown addr → skip; corrupt values (outside min/max) → drop.
+- Codegen (`components/nibe/__init__.py` + `registers.py`): at build time merges model JSONs into `catalog.h` (`NIBE_META`/`NIBE_TITLES`/`NIBE_MODELS` struct arrays). No runtime JSON on MCU. Unknown model → defaults only; unknown addr → skip; corrupt values (outside min/max) → drop.
 - Writes: `number` → clamp raw to merged R/W min/max → `queue_write` → next `0x6B` slot. RMU-range writes (addr < 20000) are dropped.
 - Anti-spam: every sensor carries `delta / throttle / heartbeat` filters. Polling alone creates no entity — only `sensor:`/`number:` entries publish.
 
@@ -30,10 +30,10 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 
 Factory-created at boot from the flash-stored selection (`Preferences`, survives OTA) — `packages/base.yaml` holds no per-register blocks anymore, only the model text sensor below. Entity types are auto-inferred (R→sensor, R/W→number, curated switches/selects).
 
-Factory defaults = the previous static set (18 registers): sensors 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW; numbers (writable) 43005 Degree Minutes (-3000…3000, step 10), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C). Names are identical to the old YAML titles, so HA entity ids carry over.
+Factory defaults = the previous static set (18 registers): sensors 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW; numbers (writable) 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C). Names are identical to the old YAML titles, so HA entity ids carry over.
 Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, block 47370=0. Prefer 47011 over raw 43005 DM writes. Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
 
-Unit note: factory entities are unitless — ESPHome 2026.9.0 has no runtime unit setter (units are codegen string-pooled into the `App.register_*` call), so the picker cannot attach them; min/max/step still come from the catalog.
+Unit note: factory entities are unitless — ESPHome 2026.9.0 has no runtime unit setter (units are codegen string-pooled into the `App.register_*` call), so the picker cannot attach them; min/max/step still come from the catalog. Factory numbers step by 1 raw LSB (e.g. DM 43005 steps 0.1), so the HA stepper feels finer than the old YAML (DM step was 10).
 
 Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 43144, 43305, 47007, 47011, 47041, 47370, 47371, 47387, 47043`. Poll set = enabled selection + optional `extra_poll:` — no separate list to sync.
 

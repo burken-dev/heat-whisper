@@ -27,36 +27,6 @@ def _by_reg(models: dict):
     return by_reg
 
 
-def common_and_deltas(models: dict):
-    by_reg = _by_reg(models)
-    # ponytail: allowlist-seeded, not intersection (register sets differ per model)
-    common, seen = [], set()
-    for a in DEFAULT_ALLOWLIST:
-        s = str(a)
-        if s in by_reg and s not in seen:
-            seen.add(s)
-            common.append(s)
-    in_common = set(common)
-    deltas = {m: sorted({r["register"] for r in regs} - in_common, key=lambda x: int(x))
-              for m, regs in models.items()}
-    return common, deltas
-
-def generate_header(models: dict) -> str:
-    common, deltas = common_and_deltas(models)
-    by_reg = _by_reg(models)
-    lines = ["#pragma once", "#include <stdint.h>",
-             "struct NibeReg { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };"]
-    entries = ",".join(
-        f"{{{r},{_num((by_reg[r]).get('factor',1))},"
-        f"{SIZE_CODES[(by_reg[r]).get('size','s16')]},"
-        f"{1 if (by_reg[r]).get('mode')=='R/W' else 0},"
-        f"{_num((by_reg[r]).get('min',0))},{_num((by_reg[r]).get('max',0))}}}"
-        for r in common)
-    lines.append(f"static const NibeReg NIBE_COMMON[] = {{{entries}}};")
-    lines.append(f"static const uint16_t NIBE_COMMON_N = {len(common)};")
-    return "\n".join(lines) + "\n"
-
-
 def is_known(addr: int, models: dict) -> bool:
     want = str(addr)
     for regs in models.values():

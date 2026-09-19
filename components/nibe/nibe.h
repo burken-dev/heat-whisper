@@ -11,7 +11,6 @@
 #include "esphome/core/application.h"
 #include "catalog.h"
 #include <queue>
-#include <set>
 #include <string>
 #include <vector>
 // ponytail: must match SIZE_CODES in registers.py
@@ -36,7 +35,7 @@ class NibeNumber : public esphome::number::Number, public esphome::Component {
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
   void publish_value(float v) { publish_state(v); }
-  void control(float value) override;  // clamp to NIBE_COMMON range, queue_write
+  void control(float value) override;  // clamp to NIBE_META range, queue_write
  protected:
   NibeComponent *parent_{nullptr};
   uint16_t addr_{0};
@@ -89,11 +88,6 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
     if (writes_.size() >= 4) { ESP_LOGW("nibe", "Write queue full, dropping oldest"); writes_.pop(); }
     writes_.push({addr, raw});
   }
-  void set_register_enabled(uint16_t addr, bool enabled) {
-    if (enabled) disabled_.erase(addr);
-    else disabled_.insert(addr);
-  }
-  bool is_enabled(uint16_t addr) const { return disabled_.count(addr) == 0; }
   void add_sensor(NibeSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
   void add_number(NibeNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
   void add_select(NibeSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
@@ -132,7 +126,6 @@ class NibeComponent : public esphome::Component, public esphome::uart::UARTDevic
   std::vector<NibeNumber *> numbers_;
   std::vector<NibeSelect *> selects_;
   std::vector<NibeSwitch *> switches_;
-  std::set<uint16_t> disabled_;
 };
 }  // namespace nibe
 }  // namespace esphome
