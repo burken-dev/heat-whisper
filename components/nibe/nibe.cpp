@@ -53,8 +53,15 @@ void NibeComponent::loop() {
 void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
-    if (!reads_.empty()) { auto r = reads_.front(); reads_.pop(); reads_.push(r); tx_(r.data(), r.size()); }
-    else send_ack_();
+    size_t laps = reads_.size();
+    bool sent = false;
+    while (laps-- > 0 && !reads_.empty()) {
+      auto r = reads_.front(); reads_.pop();
+      uint16_t a = (r.size() == 6) ? (uint16_t)(r[3] | (r[4] << 8)) : 0;
+      if (r.size() == 6 && !is_enabled(a)) { reads_.push(r); continue; }
+      reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
+    }
+    if (!sent) send_ack_();
   } else if ((f[2] == slave_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     if (passive_) return;
     if (!writes_.empty()) {
@@ -150,13 +157,22 @@ void NibeComponent::on_frame_(const uint8_t *f, uint8_t n) {
   }
 }
 void NibeComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
-  for (uint16_t a : addrs) {
-    uint8_t o[6] = {0xC0, 0x69, 0x02, (uint8_t) (a & 0xFF), (uint8_t) (a >> 8), 0};
-    o[5] = calc_crc_c0(o);
-    reads_.emplace(o, o + 6);
+  for (uint16_t a : addrs) ensure_polled(a);
+}
+void NibeComponent::ensure_polled(uint16_t addr) {
+  uint8_t lo = addr & 0xFF, hi = addr >> 8;
+  size_t laps = reads_.size();  // ponytail: queue has no iterators, rotate like on_frame_
+  while (laps-- > 0) {
+    auto q = reads_.front(); reads_.pop();
+    if (q.size() == 6 && q[3] == lo && q[4] == hi) { reads_.push(q); return; }
+    reads_.push(q);
   }
+  uint8_t o[6] = {0xC0, 0x69, 0x02, lo, hi, 0};
+  o[5] = calc_crc_c0(o);
+  reads_.emplace(o, o + 6);
 }
 void NibeComponent::on_value(uint16_t addr, float v) {
+  if (!is_enabled(addr)) return;
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)

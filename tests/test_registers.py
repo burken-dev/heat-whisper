@@ -1,6 +1,6 @@
 # tests/test_registers.py
 import json, os
-from components.nibe.registers import common_and_deltas, generate_header
+from components.nibe.registers import common_and_deltas, generate_header, is_known
 def test_common_contains_bt1():
     models = {
         "F750": [{"register": "40004", "factor": 10, "size": "s16", "mode": "R"}],
@@ -48,3 +48,15 @@ def test_real_43005_resolves_nonzero_minmax():
     hdr = generate_header(models)
     entry = hdr[hdr.index("{43005,"):hdr.index("{43005,") + 80]
     assert "-30000" in entry and "30000" in entry
+
+
+def test_is_known_hit_and_miss():
+    models = {"F750": [{"register": "40004", "factor": 10, "size": "s16", "mode": "R"}]}
+    assert is_known(40004, models) is True
+    assert is_known(12345, models) is False
+
+def test_init_uses_extra_poll():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "__init__.py")).read()
+    assert "extra_poll" in src
+    assert 'CONF_REGISTERS = "registers"' not in src

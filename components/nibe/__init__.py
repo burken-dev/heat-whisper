@@ -7,11 +7,11 @@ from .registers import generate_header, DEFAULT_ALLOWLIST
 CODEOWNERS = ["@andreas"]
 nibe_ns = cg.esphome_ns.namespace("nibe")
 Nibe = nibe_ns.class_("NibeComponent", cg.Component, uart.UARTDevice)
-CONF_REGISTERS = "registers"
+CONF_EXTRA_POLL = "extra_poll"
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(Nibe),
     cv.Optional("slave_address", default=0x19): cv.hex_int,
-    cv.Optional(CONF_REGISTERS, default=list(DEFAULT_ALLOWLIST)): cv.ensure_list(cv.int_),
+    cv.Optional(CONF_EXTRA_POLL, default=[]): cv.ensure_list(cv.int_),
     cv.Optional("passive", default=False): cv.boolean,
     cv.Optional("flow_control_pin"): pins.gpio_output_pin_schema,
 }).extend(uart.UART_DEVICE_SCHEMA)  # provides uart_id (register_uart_device needs it)
@@ -24,7 +24,7 @@ async def to_code(config):
     if "flow_control_pin" in config:
         pin = await cg.gpio_pin_expression(config["flow_control_pin"])
         cg.add(var.set_flow_control_pin(pin))
-    cg.add(var.set_poll_registers(config[CONF_REGISTERS]))
+    cg.add(var.set_poll_registers(config[CONF_EXTRA_POLL]))
     models = {}
     mdir = os.path.join(os.path.dirname(__file__), "models")  # ponytail: vendored MIT maps, see models/LICENSE
     for f in sorted(os.listdir(mdir)):

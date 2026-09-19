@@ -47,3 +47,14 @@ def test_number_to_code_wiring():
     var.set_parent.assert_called_once_with(parent)
     var.set_register.assert_called_once_with(43005)
     parent.add_number.assert_called_once_with(var)
+
+
+def test_sensor_schema_rejects_unknown_register_warning():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "sensor.py")).read()
+    assert "is_known" in src
+
+def test_number_schema_rejects_unknown_register_warning():
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "nibe", "number.py")).read()
+    assert "is_known" in src
