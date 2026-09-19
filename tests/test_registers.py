@@ -63,7 +63,7 @@ def test_init_uses_extra_poll():
 
 
 def test_smart_allowlist_present():
-    for a in [40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387]:
+    for a in [40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043]:
         assert a in DEFAULT_ALLOWLIST
 
 
@@ -76,5 +76,5 @@ def test_smart_common_decodable_real_models():
             with open(os.path.join(mdir, f)) as fh:
                 models[f[:-5]] = json.load(fh)
     common, _ = common_and_deltas(models)
-    for a in ["47011", "47041", "47371", "47370", "47387", "40033"]:
+    for a in ["40033", "43144", "43305", "47007", "47011", "47041", "47370", "47371", "47387", "47043"]:
         assert a in common
