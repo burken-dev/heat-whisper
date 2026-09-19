@@ -5,6 +5,7 @@
 from components.heatwhisper.modbus_rtu import (
     crc16, build_read, build_write_single, build_write_multi,
     parse_read_response, decode_be)
+import pytest
 
 
 def test_crc16_known_vector():
@@ -29,6 +30,17 @@ def test_write_multi_single_register():
 def test_parse_read_response():
     f = bytes([0x01, 0x03, 0x02, 0x00, 0xD2, 0x38, 0x19])
     assert parse_read_response(f, 3, 1) == [0x00D2]
+    with pytest.raises(ValueError):
+        parse_read_response(bytes([0x01, 0x03, 0x02, 0x00, 0xD2, 0x00, 0x00]), 3, 1)
+    with pytest.raises(ValueError):
+        parse_read_response(bytes([0x01, 0x04, 0x02, 0x00, 0xD2, 0x38, 0x19]), 3, 1)
+
+
+def test_build_write_single():
+    f = build_write_single(1, 40004, 0x00D2)
+    assert f[:4] == bytes([0x01, 0x06, 0x9C, 0x43]) and f[4:6] == bytes([0x00, 0xD2])
+    assert len(f) == 8  # addr+fc+reg(2)+value(2)+crc(2)
+    assert crc16(f[:-2]) == f[-2] | (f[-1] << 8)
 
 
 def test_decode_be_scales_and_sign():

@@ -29,9 +29,11 @@ def build_write_multi(addr: int, reg: int, values: list) -> bytes:
     return body + bytes([c & 0xFF, (c >> 8) & 0xFF])
 
 def parse_read_response(frame: bytes, fc: int, count: int) -> list:
-    assert frame[1] == fc and frame[2] == 2 * count
+    if frame[1] != fc or frame[2] != 2 * count:
+        raise ValueError("function-code/length mismatch")
     body, got = frame[:-2], frame[-2] | (frame[-1] << 8)
-    assert crc16(body) == got
+    if crc16(body) != got:
+        raise ValueError("CRC mismatch")
     return [(frame[3 + 2 * i] << 8) | frame[4 + 2 * i] for i in range(count)]
 
 def decode_be(words: list, size: str, factor: int, word_order: str) -> float:
