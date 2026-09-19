@@ -20,8 +20,8 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 
 | Board | TX | RX | Notes |
 |---|---|---|---|
-| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | Flash via ESP Web Tools (`manifest.json`) or `esphome` |
-| Pico W (`rpipicow`) | GPIO4 | GPIO5 | Flash `firmware.uf2` manually via USB mass-storage |
+| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | Flash via web flasher (`index.html` + `manifest.json`, GitHub Pages) or `esphome` |
+| Pico W (`rpipicow`) | GPIO4 | GPIO5 | Flash `nibe_pico_w.uf2` (release) manually via USB mass-storage (BOOTSEL) |
 
 - `flow_control_pin` (e.g. GPIO18): optional RS485 auto-direction pin. Absent = auto-direction transceiver.
 - `logger: baud_rate: 0` — logger kept off UART pins (see `packages/base.yaml`).
@@ -30,7 +30,7 @@ Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
 
 From `packages/base.yaml`:
 
-Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency. Number (writable): 43005 Degree Minutes (-3000…3000, step 10).
+Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency. Number (writable): 43005 Degree Minutes (-3000…3000, step 10). Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
 
 Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001`. Poll set = your entities + optional `extra_poll:` — no separate list to sync.
 
@@ -45,6 +45,10 @@ cp secrets.yaml.example secrets.yaml
 # secrets.yaml
 wifi_ssid: "YOUR_WIFI"
 wifi_password: "YOUR_PASSWORD"
+ap_password: "nibebridge01"   # fallback AP, min 8 chars — change it
+ota_password: "CHANGE_ME_OTA"
+web_password: "CHANGE_ME_WEB" # web_server :80, user admin
+api_key: "BASE64_32_BYTES"    # generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
 # mqtt_broker: "YOUR_MQTT_BROKER"
 # mqtt_user: "YOUR_MQTT_USER"
 # mqtt_password: "YOUR_MQTT_PASSWORD"
@@ -53,7 +57,7 @@ wifi_password: "YOUR_PASSWORD"
 Bring-up (recommended — verify decode before transmitting):
 
 1. Set `passive: true` under `nibe:` in `packages/base.yaml`.
-2. Flash: `esphome run nibe_esp32.yaml` (or `nibe_pico_w.yaml`).
+2. Flash: `esphome run nibe_esp32.yaml` (or `nibe_pico_w.yaml`), or the web flasher (`index.html`) for ESP32 / UF2 drop for Pico W.
 3. Confirm decoded values in logs / `web_server` (port 80). Fallback AP `Nibe-Bridge` + captive portal if Wi-Fi fails.
 4. Set `passive: false` (or remove), re-flash. Bridge now ACKs and answers poll slots.
 
@@ -71,7 +75,13 @@ nibe:
 
 Migration: delete any existing `nibe: registers: [...]` key — entities auto-poll now; use `extra_poll:` only for entity-less sniffing.
 
-Add an entity (it auto-polls; copy its switch block too if you want a runtime toggle):
+Add an entity (it auto-polls; copy its switch block too if you want a runtime toggle).
+Generate the blocks instead of hand-writing them:
+
+```bash
+python3 scripts/add_register.py 40033            # sensor + switch + on_boot line
+python3 scripts/add_register.py 43005 --writable # number variant
+```
 
 ```yaml
 sensor:
@@ -87,7 +97,7 @@ sensor:
       - heartbeat: 5min
 ```
 
-MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam.
+MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "nibe"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
 
 ## Build / test / release
 
@@ -98,7 +108,14 @@ esphome compile nibe_esp32.yaml
 esphome compile nibe_pico_w.yaml
 ```
 
-CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags (`firmware.factory/ota.bin`, Pico `firmware.bin/uf2`) attached to GitHub release.
+CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags (`nibe_esp32.factory/ota.bin`, `nibe_pico_w.bin/uf2`) attached to GitHub release + deployed to GitHub Pages (web flasher).
+
+## Troubleshooting
+
+- No values? Flash with `passive: true` first, check logs / `web_server` :80 (user `admin`), then re-enable TX.
+- Writes ignored for addr < 20000 (RMU 1xxxx range): dropped by design, never sent in the 0x6B slot.
+- `Heat Pump Model` empty: pump hasn't sent its 0x6D announcement yet — wait a minute.
+- API "invalid key": regenerate `api_key` as 32 random bytes base64 (see Quick start).
 
 ## Non-goals
 

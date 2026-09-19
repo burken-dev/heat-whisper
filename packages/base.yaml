@@ -14,13 +14,24 @@ esphome:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  reboot_timeout: 15min
+  power_save_mode: none
   ap:
     ssid: "Nibe-Bridge"
-    password: "nibebridge"
+    password: !secret ap_password
 captive_portal:
 web_server:
   port: 80
+  auth:
+    username: admin
+    password: !secret web_password
 api:
+  encryption:
+    key: !secret api_key
+ota:
+  - platform: esphome
+    password: !secret ota_password
+safe_mode:
 logger:
   baud_rate: 0
 
@@ -132,6 +143,14 @@ number:
     max_value: 3000
     step: 10
 
+text_sensor:
+  # Autodetected from the pump's 0x6D announcement (empty = not heard yet).
+  - platform: template
+    name: "Heat Pump Model"
+    lambda: 'return id(nibe_bridge).get_model();'
+    update_interval: 60s
+    entity_category: diagnostic
+
 switch:
   - platform: template
     name: "Enable BT1 Outdoor"
@@ -202,7 +221,11 @@ switch:
 # publishes to its single native state topic (<node>/sensor/<name>/state)
 # automatically — no extra config, and never the reference bridge's
 # /json + /raw triple-topic spam.
+# Custom topic prefix: topic_prefix: "nibe" (default is <node name>).
+# HA discovery is automatic when mqtt: is present; set discovery: false to disable.
 # mqtt:
 #   broker: !secret mqtt_broker
 #   username: !secret mqtt_user
 #   password: !secret mqtt_password
+#   topic_prefix: "nibe"
+#   discovery: true
