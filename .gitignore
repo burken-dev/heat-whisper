@@ -3,5 +3,3 @@ reference-project/
 secrets.yaml
 .esphome/
 __pycache__/
-components/nibe/registers.h
-components/nibe/catalog.h
