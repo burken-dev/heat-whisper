@@ -1,9 +1,9 @@
 {
-  "name": "Heat Pump Bridge",
+  "name": "HeatWhisper",
   "version": "0.1.0",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": true,
   "builds": [
-    { "chipFamily": "ESP32", "parts": [{ "path": "heatpump_esp32.factory.bin", "offset": 0 }] }
+    { "chipFamily": "ESP32", "parts": [{ "path": "heatwhisper_esp32.factory.bin", "offset": 0 }] }
   ]
 }

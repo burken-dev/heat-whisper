@@ -2,14 +2,14 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import number
 import logging, os, json
-from . import Heatpump, heatpump_ns
+from . import HeatWhisper, heatwhisper_ns
 from .registers import is_known
 
 _LOGGER = logging.getLogger(__name__)
-HeatpumpNumber = heatpump_ns.class_("HeatpumpNumber", number.Number, cg.Component)
+HeatWhisperNumber = heatwhisper_ns.class_("HeatWhisperNumber", number.Number, cg.Component)
 
-CONFIG_SCHEMA = number.number_schema(HeatpumpNumber).extend({
-    cv.GenerateID("heatpump_id"): cv.use_id(Heatpump),
+CONFIG_SCHEMA = number.number_schema(HeatWhisperNumber).extend({
+    cv.GenerateID("heatwhisper_id"): cv.use_id(HeatWhisper),
     cv.Required("register"): cv.int_,
     cv.Required("min_value"): cv.float_,
     cv.Required("max_value"): cv.float_,
@@ -24,8 +24,8 @@ async def to_code(config):
             with open(os.path.join(mdir, f)) as fh:
                 models[f[:-5]] = json.load(fh)
     if not is_known(config["register"], models):
-        _LOGGER.warning("heatpump number register %s not in model maps; entity will never fire", config["register"])
-    parent = await cg.get_variable(config["heatpump_id"])
+        _LOGGER.warning("heatwhisper number register %s not in model maps; entity will never fire", config["register"])
+    parent = await cg.get_variable(config["heatwhisper_id"])
     var = await number.new_number(
         config,
         min_value=config["min_value"],

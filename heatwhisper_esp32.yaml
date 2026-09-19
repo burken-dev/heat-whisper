@@ -1,9 +1,9 @@
 esphome:
-  name: heatpump-bridge-pico
-  friendly_name: Heat Pump Bridge Pico
+  name: heat-whisper
+  friendly_name: HeatWhisper
 packages:
   base: !include packages/base.yaml
-  hw: !include packages/pico_w_base.yaml
+  hw: !include packages/esp32_base.yaml
 external_components:
   - source:
       type: local

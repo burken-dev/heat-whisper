@@ -1,12 +1,12 @@
 # tests/test_registers.py
 import json, os
-from components.heatpump.registers import DEFAULT_ALLOWLIST, is_known
+from components.heatwhisper.registers import DEFAULT_ALLOWLIST, is_known
 
 
 def test_merge_prefers_nonzero_minmax():
     # first-wins would lock in 0/0 (corrupt filter off, number clamp open);
     # _by_reg is shared with the catalog, so cover it via generate_catalog_header.
-    from components.heatpump.registers import generate_catalog_header
+    from components.heatwhisper.registers import generate_catalog_header
     models = {
         "A": [{"register": "43005", "factor": 10, "size": "s16",
                "mode": "R/W", "min": "0", "max": "0"}],
@@ -19,8 +19,8 @@ def test_merge_prefers_nonzero_minmax():
 
 
 def test_real_43005_resolves_nonzero_minmax():
-    from components.heatpump.registers import generate_catalog_header
-    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "models")
+    from components.heatwhisper.registers import generate_catalog_header
+    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "heatwhisper", "models")
     models = {}
     for f in sorted(os.listdir(mdir)):
         if f.endswith(".json"):
@@ -38,7 +38,7 @@ def test_is_known_hit_and_miss():
 
 def test_init_uses_extra_poll():
     import os
-    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "__init__.py")).read()
+    src = open(os.path.join(os.path.dirname(__file__), "..", "components", "heatwhisper", "__init__.py")).read()
     assert "extra_poll" in src
     assert 'CONF_REGISTERS = "registers"' not in src
 
@@ -49,9 +49,9 @@ def test_smart_allowlist_present():
 
 
 def test_smart_catalog_decodable_real_models():
-    from components.heatpump.registers import generate_catalog_header
+    from components.heatwhisper.registers import generate_catalog_header
     import json, os
-    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "heatpump", "models")
+    mdir = os.path.join(os.path.dirname(__file__), "..", "components", "heatwhisper", "models")
     models = {}
     for f in sorted(os.listdir(mdir)):
         if f.endswith(".json"):
