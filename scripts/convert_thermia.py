@@ -46,7 +46,9 @@ def convert(src, dst):
                         "min": "0", "max": "0", "mb_fc": BASE[tbl][1],
                         "word_order": "ABCD"})
     out.sort(key=lambda r: int(r["register"]))
-    json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    with open(dst, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=1)
+        fh.write("\n")
     print(f"wrote {len(out)} registers, skipped {skipped} derived/dup views",
           file=sys.stderr)
 
