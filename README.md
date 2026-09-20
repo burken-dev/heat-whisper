@@ -1,47 +1,53 @@
 # HeatWhisper
 
-ESPHome bridge between a Nibe F-series heat pump (RS485 master) and Home Assistant. Active slave: answers pump polls, decodes registers, queues writes into poll slots. No control logic on-device — telemetry only.
+ESPHome bridge between a NIBE heat pump (RS485) and Home Assistant. It acts as a room-unit slave: answers pump polls, decodes registers, and sends writes back in poll slots. No control logic on-device — telemetry and writes only.
 
 Native HA API is primary. MQTT is opt-in only.
 
-Boards: ESP32 (`heatwhisper_esp32.yaml`) and Raspberry Pi Pico W (`heatwhisper_pico_w.yaml`). Thin wrappers over `packages/{base,esp32_base,pico_w_base}.yaml` (pins/baud only). Protocol + register maps (`components/heatwhisper/models/*.json`, MIT, see `models/LICENSE`) come from `reference-project/` (NibePi Node.js) — used as reference only, not ported.
+Boards: ESP32 (`heatwhisper_esp32.yaml`) and Raspberry Pi Pico W (`heatwhisper_pico_w.yaml`).
 
-## How it works
+## Supported heat pumps
 
-- `loop()` drains UART non-blocking, scans for `0x5C` frames, XOR checksum, NACK (`0x15`) on fail. Handles `0x5C`-escape (double-`0x5C` squeeze).
-- Routing: read token `0x69` → send next queued `C0 69 02 lo hi CRC` or ACK; write token `0x6B` → send one queued `C0 6B 06 …` or ACK; data `0x68/0x6A/0x62` → decode + publish + ACK; `0x6D` announcement → model auto-detect; RMU `0x19–0x1C` slots (`0x60/0x63/0xEE`) → ACK / fixed version reply. Never transmits outside a poll slot.
-- Codegen (`components/heatwhisper/__init__.py` + `registers.py`): at build time merges model JSONs into `catalog.h` (`HW_META`/`HW_TITLES`/`HW_MODELS` struct arrays). No runtime JSON on MCU. Unknown model → defaults only; unknown addr → skip; corrupt values (outside min/max) → drop.
-- Writes: `number` → clamp raw to merged R/W min/max → `queue_write` → next `0x6B` slot. RMU-range writes (addr < 20000) are dropped.
-- Anti-spam: every sensor carries `delta / throttle / heartbeat` filters. Polling alone creates no entity — only `sensor:`/`number:` entries publish.
+Brand: **NIBE** (RS485 / NIBE Modbus, not S-series Modbus-TCP).
 
-## Hardware
+Auto-detected from the pump's announcement frame — no model setting needed. If your model is not listed, the bridge still runs with a generic register set.
 
-Pump RS485 (A/B) → RS485-to-TTL transceiver → MCU UART, 9600 8N1.
+| Family | Models |
+|---|---|
+| F ground-source | F1145, F1155, F1245, F1255, F1345, F1355 |
+| F exhaust-air | F370, F470, F730, F750 |
+| S ground-source | S1255 |
+| Indoor modules | VVM225, VVM310, VVM320, VVM325, VVM500, VVMS320 |
+| Control / accessories | SMO40, SHK200S, HMA60, VPK8R, STAR12, TehowattiAir |
+| Room units | RMU40 S1–S4 |
 
-| Board | TX | RX | Notes |
+Register maps live in `components/heatwhisper/models/*.json` (one file per model above).
+
+## What you need
+
+- ESP32 or Raspberry Pi Pico W
+- RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1)
+- NIBE pump with a free RS485 port
+- Home Assistant with the ESPHome integration
+
+| Board | TX | RX | Flashing |
 |---|---|---|---|
-| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | Flash via web flasher (`index.html` + `manifest.json`, GitHub Pages) or `esphome` |
-| Pico W (`rpipicow`) | GPIO4 | GPIO5 | Flash `heatwhisper_pico_w.uf2` (release) manually via USB mass-storage (BOOTSEL) |
+| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | `esphome run` or web flasher (`index.html`) |
+| Pico W (`rpipicow`) | GPIO4 | GPIO5 | `firmware.uf2` via USB mass-storage (BOOTSEL) |
 
-- `flow_control_pin` (e.g. GPIO18): optional RS485 auto-direction pin. Absent = auto-direction transceiver.
-- `logger: baud_rate: 0` — logger kept off UART pins (see `packages/base.yaml`).
+Optional `flow_control_pin` (e.g. GPIO18) for transceivers needing manual direction control. Without it, an auto-direction transceiver is assumed.
 
-## Default entities
+## Getting started
 
-Factory-created at boot from the flash-stored selection (`Preferences`, survives OTA) — `packages/base.yaml` holds no per-register blocks anymore, only the model text sensor below. Entity types are auto-inferred (R→sensor, R/W→number, curated switches/selects).
+### 1. Wire it up
 
-Factory defaults = the previous static set (18 registers): sensors 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW; numbers (writable) 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco,1=Normal,2=Luxury,4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C). Names are identical to the old YAML titles, so HA entity ids carry over.
-Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, block 47370=0. Prefer 47011 over raw 43005 DM writes. Diagnostic: `Heat Pump Model` text sensor (autodetected from the pump's 0x6D announcement, empty until first heard).
+Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the transceiver from the MCU (3.3 V or 5 V per module).
 
-Unit note: factory entities are unitless — ESPHome 2026.9.0 has no runtime unit setter (units are codegen string-pooled into the `App.register_*` call), so the picker cannot attach them; min/max/step still come from the catalog. Factory numbers step by 1 raw LSB (e.g. DM 43005 steps 0.1), so the HA stepper feels finer than the old YAML (DM step was 10).
-
-Allowlist reference (`DEFAULT_ALLOWLIST` in `registers.py`): `40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001, 43144, 43305, 47007, 47011, 47041, 47370, 47371, 47387, 47043`. Poll set = enabled selection + optional `extra_poll:` — no separate list to sync.
-
-## Quick start
+### 2. Add Wi-Fi credentials
 
 ```bash
 cp secrets.yaml.example secrets.yaml
-# edit secrets.yaml with wifi (mqtt optional)
+# edit secrets.yaml
 ```
 
 ```yaml
@@ -50,19 +56,41 @@ wifi_ssid: "YOUR_WIFI"
 wifi_password: "YOUR_PASSWORD"
 ap_password: "heatwhisper01"   # fallback AP, min 8 chars — change it
 ota_password: "CHANGE_ME_OTA"
-web_password: "CHANGE_ME_WEB" # web_server :80, user admin
-api_key: "BASE64_32_BYTES"    # generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-# mqtt_broker: "YOUR_MQTT_BROKER"
-# mqtt_user: "YOUR_MQTT_USER"
-# mqtt_password: "YOUR_MQTT_PASSWORD"
+web_password: "CHANGE_ME_WEB"  # web_server :80, user admin
+api_key: "BASE64_32_BYTES"     # generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-Bring-up (recommended — verify decode before transmitting):
+### 3. First flash: listen-only
+
+Flash with listen-only mode so you can verify decoding before the bridge transmits anything:
 
 1. Set `passive: true` under `heatwhisper:` in `packages/base.yaml`.
-2. Flash: `esphome run heatwhisper_esp32.yaml` (or `heatwhisper_pico_w.yaml`), or the web flasher (`index.html`) for ESP32 / UF2 drop for Pico W.
-3. Confirm decoded values in logs / `web_server` (port 80). Fallback AP `HeatWhisper` + captive portal if Wi-Fi fails.
-4. Set `passive: false` (or remove), re-flash. Bridge now ACKs and answers poll slots.
+2. Flash: `esphome run heatwhisper_esp32.yaml` (or `heatwhisper_pico_w.yaml`).
+3. Open logs or `http://<node>` (user `admin`) and confirm you see decoded temperatures. If Wi-Fi fails, connect to the `HeatWhisper` fallback AP.
+
+### 4. Enable the bridge and add it to Home Assistant
+
+1. Set `passive: false` (or remove the line), re-flash.
+2. In Home Assistant: Settings → Devices & Services → Add → ESPHome, enter the node address. Use the `api_key` from `secrets.yaml` when asked.
+
+### 5. Pick registers
+
+1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot.
+2. The selection is stored in flash and survives OTA. Fewer registers = faster poll cycle, so enable only what you need.
+
+Done — sensors appear in Home Assistant and writable registers appear as numbers/switches/selects.
+
+## Default entities
+
+Created at first boot (18 registers):
+
+Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW.
+
+Numbers (writable): 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47041 HW Comfort (0=Eco, 1=Normal, 2=Luxury, 4=Smart), 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1), 47043 HW Luxury Start Temp (5…70 °C).
+
+Plus a diagnostic `Heat Pump Model` text sensor (empty until the pump's first announcement is heard).
+
+Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, set 47370=0. Prefer 47011 over raw 43005 writes.
 
 ## Configuration
 
@@ -73,22 +101,12 @@ heatwhisper:
   # passive: true          # decode-only bring-up
   # slave_address: 0x19    # default RMU S1 (0x1A-0x1C = S2-S4, 0x20 = Modbus40 alt)
   # flow_control_pin: GPIO18
-  # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
+  # extra_poll: [10001]    # poll-without-entity (sniffing)
 ```
 
-Migration: delete any existing `nibe: registers: [...]` key — entities auto-poll now; use `extra_poll:` only for entity-less sniffing.
+Writes to addresses below 20000 (RMU range) are dropped by design.
 
-Migration from `heatpump:`: replace the `heatpump:` block with `heatwhisper:` (`id: heatwhisper_bridge`, `uart_id: heatwhisper_uart`), delete the old key, re-flash. Entity names are unchanged; the MQTT topic prefix, fallback AP (`HeatWhisper`), picker URL (`/heatwhisper/registers`) and release filenames change. Saved register selections survive (NVS key unchanged).
-
-Pick registers at runtime — no YAML editing, no reflash to change the set:
-
-1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot to apply.
-2. The poll cycle slows ~linearly with enabled count — enable only what you need.
-3. The selection is stored in flash and survives OTA; factory defaults are the 18 registers above.
-
-Breaking change: the per-register `Enable …` switches and the `esphome.on_boot` re-assert wiring are removed — the picker replaces them. (`scripts/add_register.py` was deleted with the static blocks; nothing referenced it.)
-
-MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "heatwhisper"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
+MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its native state topic automatically. Optional `topic_prefix: "heatwhisper"`; HA discovery is automatic, `discovery: false` disables it.
 
 ## Modbus-RTU (non-Nibe and Nibe MODBUS40)
 
@@ -103,23 +121,23 @@ heatwhisper:
 
 Nibe MODBUS40 wiring: MODBUS40 accessory X2 terminals → RS485 A/B transceiver, 9600 8N1; enable MODBUS40 in the pump installer menu. Writes to MODBUS40 models use FC16 only, never FC06 (enforced from `transports.json` `write_fc`). Bring-up order: flash with `passive: true` first to sniff/decode bus traffic, confirm values in logs/`web_server`, then enable TX (`passive: false`). The picker (`/heatwhisper/registers`) tags each model with `"proto": "nibe"|"modbus"` and, in modbus mode, lists the configured model's registers.
 
-## Build / test / release
+## Build / test
 
 ```bash
-python -m pytest tests/ -v          # host tests (decode, registers, entities, RMU)
-esphome config heatwhisper_esp32.yaml      # validate
+python -m pytest tests/ -v
+esphome config heatwhisper_esp32.yaml
 esphome compile heatwhisper_esp32.yaml
 esphome compile heatwhisper_pico_w.yaml
 ```
 
-CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags (`heatwhisper_esp32.factory/ota.bin`, `heatwhisper_pico_w.bin/uf2`) attached to GitHub release + deployed to GitHub Pages (web flasher).
+CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags attached to the GitHub release + deployed to GitHub Pages (web flasher).
 
 ## Troubleshooting
 
 - No values? Flash with `passive: true` first, check logs / `web_server` :80 (user `admin`), then re-enable TX.
-- Writes ignored for addr < 20000 (RMU 1xxxx range): dropped by design, never sent in the 0x6B slot.
-- `Heat Pump Model` empty: pump hasn't sent its 0x6D announcement yet — wait a minute.
-- API "invalid key": regenerate `api_key` as 32 random bytes base64 (see Quick start).
+- Writes ignored for addr < 20000: dropped by design, never sent.
+- `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
+- API "invalid key": regenerate `api_key` as 32 random bytes base64 (see step 2).
 
 ## Non-goals
 
