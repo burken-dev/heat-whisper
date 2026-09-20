@@ -47,6 +47,18 @@ def test_daikin_core_registers():
     assert m["143"]["mode"] == "R/W"                             # zones mode
     assert m["161"]["mode"] == "R/W"                             # zone-1 setpoint
 
+def test_mitsubishi_core_registers():
+    # Intesis IN485MIT001A000 manual v1.0.3 §8.2.7/8.2.6/8.2.4/8.2.2, PLC (base1)
+    # addrs (wire = reg - 1): outlet-water=307, inlet-water=309, DHW-tank=286 (R);
+    # zone-1 setpoint=161 (R/W), error-code=109 (R); x1 temps (factory DIP, SW2-P7 OFF).
+    m = _regs("Mitsubishi_Ecodan")
+    assert m["307"]["unit"] == "°C" and m["307"]["mode"] == "R"  # flow temp
+    assert m["309"]["mode"] == "R"                               # return temp
+    assert m["286"]["mode"] == "R"                               # DHW tank temp
+    assert m["307"]["size"] == "s16" and m["307"]["factor"] == 1
+    assert m["161"]["mode"] == "R/W"                             # zone-1 setpoint
+    assert m["109"]["mode"] == "R"                               # error code
+
 def test_dimplex_core_registers():
     # WPM software J/L/M numbering (1...207 address-range mode; extended regs
     # up to 352 for newer datapoints) per official Dimplex wiki "Modbus RTU
