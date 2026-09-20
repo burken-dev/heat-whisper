@@ -3489,7 +3489,7 @@
     {
       "register": "31561",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R",
       "titel": "Datum periodisk varmvatten",
       "info": " ",
@@ -4633,7 +4633,7 @@
     {
       "register": "40067",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "Start­tid periodisk varm­vatten",
       "info": " ",
@@ -5425,7 +5425,7 @@
     {
       "register": "40225",
       "factor": "10",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "Mer varm­vatten",
       "info": " ",
@@ -10672,7 +10672,7 @@
     {
       "register": "43071",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "Starttid",
       "info": " ",
@@ -10683,7 +10683,7 @@
     {
       "register": "43073",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "Starttid",
       "info": " ",
@@ -10694,7 +10694,7 @@
     {
       "register": "43075",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "Stopptid",
       "info": " ",
@@ -10782,7 +10782,7 @@
     {
       "register": "43104",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12650",
       "info": " ",
@@ -10793,7 +10793,7 @@
     {
       "register": "43144",
       "factor": "1",
-      "size": "",
+      "size": "u32",
       "mode": "R/W",
       "titel": "id:12651",
       "info": " ",
@@ -10804,7 +10804,7 @@
     {
       "register": "43184",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12652",
       "info": " ",
@@ -10815,7 +10815,7 @@
     {
       "register": "43224",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12653",
       "info": " ",
@@ -10958,7 +10958,7 @@
     {
       "register": "43304",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12655",
       "info": " ",
@@ -10969,7 +10969,7 @@
     {
       "register": "43344",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12656",
       "info": " ",
@@ -10991,7 +10991,7 @@
     {
       "register": "43384",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12657",
       "info": " ",
@@ -11002,7 +11002,7 @@
     {
       "register": "43424",
       "factor": "1",
-      "size": "",
+      "size": "s32",
       "mode": "R/W",
       "titel": "id:12658",
       "info": " ",
@@ -11013,7 +11013,7 @@
     {
       "register": "43464",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12659",
       "info": " ",
@@ -11024,7 +11024,7 @@
     {
       "register": "43504",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12660",
       "info": " ",
@@ -11035,7 +11035,7 @@
     {
       "register": "43544",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12661",
       "info": " ",
@@ -11046,7 +11046,7 @@
     {
       "register": "43584",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12662",
       "info": " ",
@@ -11057,7 +11057,7 @@
     {
       "register": "43624",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12663",
       "info": " ",
@@ -11068,7 +11068,7 @@
     {
       "register": "43664",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12664",
       "info": " ",
@@ -11079,7 +11079,7 @@
     {
       "register": "43704",
       "factor": "1",
-      "size": "",
+      "size": "u16",
       "mode": "R/W",
       "titel": "id:12665",
       "info": " ",
@@ -11090,7 +11090,7 @@
     {
       "register": "43744",
       "factor": "1",
-      "size": "",
+      "size": "u16",
       "mode": "R/W",
       "titel": "id:12666",
       "info": " ",
@@ -11101,7 +11101,7 @@
     {
       "register": "43784",
       "factor": "1",
-      "size": "",
+      "size": "u8",
       "mode": "R/W",
       "titel": "id:12667",
       "info": " ",
@@ -11112,7 +11112,7 @@
     {
       "register": "43824",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12668",
       "info": " ",
@@ -11123,7 +11123,7 @@
     {
       "register": "43864",
       "factor": "1",
-      "size": "",
+      "size": "u32",
       "mode": "R/W",
       "titel": "id:12669",
       "info": " ",
@@ -11134,7 +11134,7 @@
     {
       "register": "43904",
       "factor": "1",
-      "size": "",
+      "size": "s16",
       "mode": "R/W",
       "titel": "id:12670",
       "info": " ",
