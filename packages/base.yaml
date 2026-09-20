@@ -30,13 +30,17 @@ heatwhisper:
   # Registers are now picked at runtime: open http://<node>/heatwhisper/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
-  # previous 18 entities; stored in flash, survives OTA.
+  # 18 entities; stored in flash, survives OTA.
   # Bring-up order: flash with passive: true first, confirm decode in
   # logs/web_server, then enable TX (passive: false).
   # passive: true
   # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
   # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
+  # Modbus-RTU mode (non-Nibe, or Nibe via MODBUS40 accessory):
+  #   protocol: modbus_rtu
+  #   model: F750        # required in modbus mode (Nibe maps double as MODBUS40 maps)
+  #   modbus_address: 1  # peer address
 
 text_sensor:
   # Autodetected from the pump's 0x6D announcement (empty = not heard yet).
@@ -48,8 +52,7 @@ text_sensor:
 
 # MQTT opt-in (OFF by default). Add a broker block and each entity above
 # publishes to its single native state topic (<node>/sensor/<name>/state)
-# automatically — no extra config, and never the reference bridge's
-# /json + /raw triple-topic spam.
+# automatically — no extra config.
 # Custom topic prefix: topic_prefix: "heatwhisper" (default is <node name>).
 # HA discovery is automatic when mqtt: is present; set discovery: false to disable.
 # mqtt:
