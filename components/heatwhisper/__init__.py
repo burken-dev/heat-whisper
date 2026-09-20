@@ -52,8 +52,8 @@ async def to_code(config):
     transports = load_transports(transports_path) if os.path.exists(transports_path) else {}
     protocol = config["protocol"]
     if protocol == "modbus_rtu":
-        if not config["model"] or config["model"] not in models:
-            raise cv.Invalid("modbus_rtu protocol requires model: one of " + ", ".join(sorted(models)))
+        if not config["model"] or config["model"] not in transports:
+            raise cv.Invalid("modbus_rtu protocol requires model: one of " + ", ".join(sorted(transports)))
     cg.add(var.set_protocol_is_modbus(protocol == "modbus_rtu"))
     cg.add(var.set_peer_address(config["modbus_address"] if protocol == "modbus_rtu" else config["slave_address"]))
     cg.add(var.set_model(config["model"]))

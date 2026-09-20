@@ -1,6 +1,8 @@
 esphome:
   name: heat-whisper-s3
   friendly_name: HeatWhisper S3
+dashboard_import:
+  package_import_url: github://burken-dev/heat-whisper/heatwhisper_esp32_s3_rs485.yaml@main
 packages:
   base: !include packages/base.yaml
   hw: !include packages/esp32_s3_rs485.yaml

@@ -16,12 +16,13 @@ Auto-detected from the pump's announcement frame — no model setting needed. If
 |---|---|
 | F ground-source | F1145, F1155, F1245, F1255, F1345, F1355 |
 | F exhaust-air | F370, F470, F730, F750 |
-| S ground-source | S1255 |
-| Indoor modules | VVM225, VVM310, VVM320, VVM325, VVM500, VVMS320 |
+| Indoor modules | VVM225, VVM310, VVM320, VVM325, VVM500 |
 | Control / accessories | SMO40, SHK200S, HMA60, VPK8R, STAR12, TehowattiAir |
 | Room units | RMU40 S1–S4 |
 
 Register maps live in `components/heatwhisper/models/*.json` (one file per model above).
+
+Nibe MODBUS40 (RTU accessory 067 144) works with exactly 16 models: F1145, F1155, F1245, F1255, F1345, F1355, F370, F470, F730, F750, VVM225, VVM310, VVM320, VVM325, VVM500, SMO40 (see `transports.json`; `model:` in modbus mode must be one of its entries). S-series (S1255, VVMS320, …) is Modbus-TCP only — no bridge needed, not supported.
 
 ## What you need
 
@@ -38,48 +39,37 @@ Register maps live in `components/heatwhisper/models/*.json` (one file per model
 
 Optional `flow_control_pin` (e.g. GPIO18) for transceivers needing manual direction control. Without it, an auto-direction transceiver is assumed. The S3 RS485-CAN package sets `flow_control_pin: GPIO21` (onboard transceiver needs manual DE — not auto-direction).
 
-## Getting started
+## Getting started (single flash, no secrets file)
 
-### 1. Wire it up
+### 1. Flash from the browser
 
-Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the transceiver from the MCU (3.3 V or 5 V per module).
+Go to the GitHub Pages flasher, plug the board in over USB, click Install. The manifest picks ESP32 vs ESP32-S3 automatically. After flashing, click **Configure Wi-Fi** (Improv over USB). Skipped it? Join the fallback AP `HeatWhisper` (password `heatwhisper01`) and pick your network in the captive portal.
 
-### 2. Add Wi-Fi credentials
+Local build instead: `esphome run heatwhisper_esp32_s3_rs485.yaml` (or `heatwhisper_esp32.yaml`). No `secrets.yaml` needed — the factory image ships open (no API key, no OTA/web passwords) so HA can discover it. Add passwords after adoption (see Hardening).
 
-```bash
-cp secrets.yaml.example secrets.yaml
-# edit secrets.yaml
-```
+### 2. Wire it up
 
-```yaml
-# secrets.yaml
-wifi_ssid: "YOUR_WIFI"
-wifi_password: "YOUR_PASSWORD"
-ap_password: "heatwhisper01"   # fallback AP, min 8 chars — change it
-ota_password: "CHANGE_ME_OTA"
-web_password: "CHANGE_ME_WEB"  # web_server :80, user admin
-api_key: "BASE64_32_BYTES"     # generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-```
+Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the transceiver from the MCU (3.3 V or 5 V per module). Waveshare S3 RS485-CAN: onboard screw terminals, 120Ω jumper ON for a single-drop bus.
 
-### 3. First flash: listen-only
+### 3. Add it to Home Assistant
 
-Flash with listen-only mode so you can verify decoding before the bridge transmits anything:
+Settings → Devices & Services → ESPHome — the node appears automatically (no API key on factory image). Click Add. The pump model is autodetected from its announcement (`Heat Pump Model` sensor, empty until first heard) — no model setting, no Modbus vs NIBE choice for NIBE pumps.
 
-1. Set `passive: true` under `heatwhisper:` in `packages/base.yaml`.
-2. Flash: `esphome run heatwhisper_esp32.yaml` (or `heatwhisper_pico_w.yaml`).
-3. Open logs or `http://<node>` (user `admin`) and confirm you see decoded temperatures. If Wi-Fi fails, connect to the `HeatWhisper` fallback AP.
-
-### 4. Enable the bridge and add it to Home Assistant
-
-1. Set `passive: false` (or remove the line), re-flash.
-2. In Home Assistant: Settings → Devices & Services → Add → ESPHome, enter the node address. Use the `api_key` from `secrets.yaml` when asked.
-
-### 5. Pick registers
+### 4. Pick registers
 
 1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot.
 2. The selection is stored in flash and survives OTA. Fewer registers = faster poll cycle, so enable only what you need.
 
 Done — sensors appear in Home Assistant and writable registers appear as numbers/switches/selects.
+
+### Hardening (optional, after adoption)
+
+Adopt in the ESPHome dashboard (`dashboard_import` is built in), then add `api` encryption, `ota` password, and `web_server` auth and reflash OTA. `secrets.yaml.example` documents the optional extras (MQTT).
+
+### Troubleshooting
+
+- No values? Check A/B wiring (try swapping), confirm decoded temps at `http://<node>`, then re-check the pump port.
+- Advanced listen-only bring-up: set `passive: true` under `heatwhisper:` for a decode-first flash, then remove it to enable TX.
 
 ## Default entities
 
@@ -109,9 +99,9 @@ Writes to addresses below 20000 (RMU range) are dropped by design.
 
 MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its native state topic automatically. Optional `topic_prefix: "heatwhisper"`; HA discovery is automatic, `discovery: false` disables it.
 
-## Modbus-RTU (non-Nibe and Nibe MODBUS40)
+## Modbus-RTU (advanced: non-Nibe and Nibe MODBUS40)
 
-Nibe F-family maps double as MODBUS40 maps (same register numbers). The bridge polls as Modbus master behind `protocol: modbus_rtu`:
+Default is NIBE slave with autodetect — most users stop here. Only for MODBUS40 accessory or non-NIBE pumps (Lambda/Thermia/…), the bridge polls as Modbus master behind `protocol: modbus_rtu`:
 
 ```yaml
 heatwhisper:
@@ -120,7 +110,7 @@ heatwhisper:
   modbus_address: 1  # peer address
 ```
 
-Nibe MODBUS40 wiring: MODBUS40 accessory X2 terminals → RS485 A/B transceiver, 9600 8N1; enable MODBUS40 in the pump installer menu. Writes to MODBUS40 models use FC16 only, never FC06 (enforced from `transports.json` `write_fc`). Bring-up order: flash with `passive: true` first to sniff/decode bus traffic, confirm values in logs/`web_server`, then enable TX (`passive: false`). The picker (`/heatwhisper/registers`) tags each model with `"proto": "nibe"|"modbus"` and, in modbus mode, lists the configured model's registers.
+Nibe MODBUS40 wiring: MODBUS40 accessory X2 terminals → RS485 A/B transceiver, 9600 8N1; enable MODBUS40 in the pump installer menu. Writes to MODBUS40 models use FC16 only, never FC06 (enforced from `transports.json` `write_fc`). The picker (`/heatwhisper/registers`) tags each model with `"proto": "nibe"|"modbus"` and, in modbus mode, lists the configured model's registers.
 
 Lambda EU-L (EU08/13/15/20/35L) needs no accessory (native RTU); bridge default is 19200 EVEN (see `transports.json`). Writes use FC16 only. Buffer demand regs 3006–3008 (+3009) must be written together in one FC16.
 
@@ -139,10 +129,10 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all 
 
 ## Troubleshooting
 
-- No values? Flash with `passive: true` first, check logs / `web_server` :80 (user `admin`), then re-enable TX.
+- No values? Check wiring (try swapping A/B), check logs / `web_server` :80, confirm the pump port is enabled.
 - Writes ignored for addr < 20000: dropped by design, never sent.
 - `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
-- API "invalid key": regenerate `api_key` as 32 random bytes base64 (see step 2).
+- Wi-Fi wrong? Hold out, or press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
 
 ## Non-goals
 
