@@ -1,0 +1,14 @@
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+uart:
+  id: heatwhisper_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO18
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+heatwhisper:
+  flow_control_pin: GPIO21
