@@ -9,7 +9,8 @@
 </head>
 <body>
 <h1>HeatWhisper — Flash</h1>
-<h2>ESP32 (WebSerial: Chrome/Edge)</h2>
+<h2>ESP32 / ESP32-S3 (WebSerial: Chrome/Edge)</h2>
+<p>ESP32-S3 RS485-CAN: same Install button — the manifest picks the matching build automatically. Wire pump A/B to the onboard screw terminals, power 7–36V, 120Ω jumper ON for a single-drop bus.</p>
 <p>Plug in via USB, click Install, pick the port. Use <code>index.html</code> from <code>https://&lt;user&gt;.github.io/heat-whisper/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost).</p>
 <esp-web-tools-button manifest="./manifest.json"></esp-web-tools-button>
 <h2>Pico W (no WebSerial — RP2040 not supported by ESP Web Tools)</h2>

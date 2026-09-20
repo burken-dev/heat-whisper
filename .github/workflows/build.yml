@@ -21,14 +21,19 @@ jobs:
       - run: pip install esphome
       - run: esphome config heatwhisper_esp32.yaml
       - run: esphome config heatwhisper_pico_w.yaml
+      - run: esphome config heatwhisper_esp32_s3_rs485.yaml
       - run: esphome compile heatwhisper_esp32.yaml
       - run: esphome compile heatwhisper_pico_w.yaml
+      - run: esphome compile heatwhisper_esp32_s3_rs485.yaml
       - run: |
           mkdir -p fw
           cp .esphome/build/heat-whisper/build/firmware.factory.bin fw/
           cp .esphome/build/heat-whisper/build/firmware.ota.bin fw/
           cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.bin fw/
           cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.uf2 fw/
+      - run: |
+          cp .esphome/build/heat-whisper-s3/build/firmware.factory.bin fw/heatwhisper_esp32_s3_rs485.factory.bin
+          cp .esphome/build/heat-whisper-s3/build/firmware.ota.bin fw/heatwhisper_esp32_s3_rs485.ota.bin
       - uses: actions/upload-artifact@v4
         with:
           name: firmware
@@ -69,6 +74,8 @@ jobs:
           cp fw/firmware.ota.bin public/heatwhisper_esp32.ota.bin
           cp fw/firmware.bin public/heatwhisper_pico_w.bin
           cp fw/firmware.uf2 public/heatwhisper_pico_w.uf2
+          cp fw/heatwhisper_esp32_s3_rs485.factory.bin public/heatwhisper_esp32_s3_rs485.factory.bin
+          cp fw/heatwhisper_esp32_s3_rs485.ota.bin public/heatwhisper_esp32_s3_rs485.ota.bin
       - uses: actions/upload-pages-artifact@v4
         with: { path: public }
       - id: deployment
