@@ -41,6 +41,7 @@ heatwhisper:
   #   protocol: modbus_rtu
   #   model: F750        # required in modbus mode (Nibe maps double as MODBUS40 maps)
   #   modbus_address: 1  # peer address
+  #   UART baud_rate must match the gateway DIP baud (Intesis default 2400; transport 9600 assumes installer configures the gateway or overrides baud).
 
 text_sensor:
   # Autodetected from the pump's 0x6D announcement (empty = not heard yet).
