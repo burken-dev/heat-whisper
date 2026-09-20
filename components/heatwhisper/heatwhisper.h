@@ -10,6 +10,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/core/application.h"
 #include "catalog.h"
+#include "nibe.h"
 #include <queue>
 #include <string>
 #include <vector>
@@ -84,7 +85,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void set_poll_registers(const std::vector<uint16_t> &addrs);
   void ensure_polled(uint16_t addr);
   void queue_write(uint16_t addr, int32_t raw) {
-    if (addr < 20000) { ESP_LOGW("heatwhisper", "Dropping RMU-range write addr %u", addr); return; }
+    if (!nibe::is_writable(addr)) { ESP_LOGW("heatwhisper", "Dropping RMU-range write addr %u", addr); return; }
     if (writes_.size() >= 4) { ESP_LOGW("heatwhisper", "Write queue full, dropping oldest"); writes_.pop(); }
     writes_.push({addr, raw});
   }
@@ -98,18 +99,10 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
   void loop() override;
-  // calc_crc_nibe: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].
-  static uint8_t calc_crc_nibe(const uint8_t *d) {
-    uint8_t c = 0;
-    for (int i = 2; i < d[4] + 5; i++) c ^= d[i];
-    return c;
-  }
+  // kept: thin wrappers over nibe:: so callers/tests don't churn.
+  static uint8_t calc_crc_nibe(const uint8_t *d) { return nibe::calc_crc_5c(d); }
   // calc_crc_c0_nibe: C0-framed slave frames [C0,CMD,LEN,DATA,CHK], LEN at [2].
-  static uint8_t calc_crc_c0_nibe(const uint8_t *d) {
-    uint8_t c = 0;
-    for (int i = 0; i < d[2] + 3; i++) c ^= d[i];
-    return c;
-  }
+  static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
   void on_frame_(const uint8_t *f, uint8_t n);
   void tx_(const uint8_t *d, size_t len);

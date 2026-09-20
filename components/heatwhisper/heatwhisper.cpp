@@ -172,7 +172,7 @@ void HeatWhisperComponent::loop() {
     if (len > 64) { rx_.erase(rx_.begin()); continue; }
     if (rx_.size() < (size_t) len + 6) return;
     std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
-    if (calc_crc_nibe(f.data()) != f[len + 5]) {
+    if (nibe::calc_crc_5c(f.data()) != f[len + 5]) {
       send_nack_();
       rx_.erase(rx_.begin());
       continue;
@@ -183,9 +183,7 @@ void HeatWhisperComponent::loop() {
       i++;
     }
     if (f.size() != (size_t) f[4] + 6) { send_nack_(); continue; }
-    uint8_t c = 0;
-    for (size_t i = 2; i < (size_t) f[4] + 5; i++) c ^= f[i];
-    f[f[4] + 5] = c;
+    f[f[4] + 5] = nibe::calc_crc_5c(f.data());
     on_frame_(f.data(), f.size());
   }
 }
@@ -203,30 +201,13 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
-      uint8_t o[10] = {0xC0, 0x6B, 0x06, (uint8_t)(w.addr & 0xFF), (uint8_t)(w.addr >> 8),
-                       (uint8_t)(w.raw & 0xFF), (uint8_t)((w.raw >> 8) & 0xFF),
-                       (uint8_t)((w.raw >> 16) & 0xFF), (uint8_t)((w.raw >> 24) & 0xFF), 0};
-      o[9] = calc_crc_c0_nibe(o);
+      uint8_t o[10];
+      nibe::encode_write(w.addr, w.raw, o);
       tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
     if (f[3] == 0x6D) {
-      if (n > 9) {  // model bytes at f[8..n-2] (matches index.js announcement slice)
-        model_.assign((const char *) (f + 8), n - 9);
-        auto sp = model_.find(' ');
-        if (sp != std::string::npos) {
-          std::string first = model_.substr(0, sp);
-          if (first == "VVM" || first == "SMO" || first == "Tehowatti" || first == "STAR") {
-            auto sp2 = model_.find(' ', sp + 1);
-            std::string second = model_.substr(sp + 1, sp2 == std::string::npos ? sp2 : sp2 - sp - 1);
-            model_ = second.empty() ? first : first + second;
-          } else {
-            model_.erase(sp);
-          }
-        }
-        auto cut = model_.find_first_of("-,");
-        if (cut != std::string::npos) model_.erase(cut);
-      }
+      model_ = nibe::parse_model(f, n);
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
@@ -274,17 +255,15 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     }
     if (f[3] == 0x63) {
       if (passive_) return;
-      uint8_t r[6] = {0xC0, 0x60, 0x02, 0x63, 0x00, 0x00};
-      r[5] = calc_crc_c0_nibe(r);  // == 0xC1, matches backend.js:283
+      uint8_t r[6];
+      nibe::build_rmu63(r);  // == C0 60 02 63 00 C1, matches backend.js:283
       tx_(r, 6);
       return;
     }
     if (f[3] == 0xEE) {
       if (passive_) return;
-      const uint8_t ver[7] = {0xC0, 0xEE, 0x03, 0xEE, 0x03, 0x01, 0x00};
       uint8_t r[7];
-      memcpy(r, ver, 7);
-      r[6] = calc_crc_c0_nibe(r);  // == 0xC1, matches backend.js:293
+      nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
       tx_(r, 7);
       return;
     }
@@ -304,8 +283,8 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
     if (q.size() == 6 && q[3] == lo && q[4] == hi) { reads_.push(q); return; }
     reads_.push(q);
   }
-  uint8_t o[6] = {0xC0, 0x69, 0x02, lo, hi, 0};
-  o[5] = calc_crc_c0_nibe(o);
+  uint8_t o[6];
+  nibe::encode_poll(addr, o);
   reads_.emplace(o, o + 6);
 }
 void HeatWhisperComponent::on_value(uint16_t addr, float v) {

@@ -75,7 +75,9 @@ def test_0x62_decoded():
 
 
 def test_rmu_write_guard():
-    assert "addr < 20000" in HDR  # I2: RMU 1xxxx dropped from 0x6B slot
+    nibe = open(os.path.join(REPO, "components", "heatwhisper", "nibe.h")).read()
+    assert "nibe::is_writable" in HDR  # I2: RMU 1xxxx dropped from 0x6B slot via seam
+    assert "20000" in nibe
 
 
 def test_write_queue_capped():
