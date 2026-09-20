@@ -60,11 +60,9 @@
     {"register":"40022","factor":"1","size":"u8","mode":"R/W","titel":"Återställ larm","info":"","unit":"","min":"0","max":"0"},
     {"register":"40196","factor":"1","size":"u8","mode":"R/W","titel":"Larmåtgärd sänk värme","info":"","unit":"","min":"0","max":"0"},
     {"register":"40197","factor":"1","size":"u8","mode":"R/W","titel":"Larm åtgärd stäng av varmvatten","info":"","unit":"","min":"0","max":"0"},
-    {"register":"40022","factor":"1","size":"u8","mode":"R/W","titel":"Återställ larm","info":"","unit":"","min":"0","max":"0"},
-    {"register":"31029","factor":"1","size":"u8","mode":"R","titel":"Antal tillsats steg som är aktiva","info":"","unit":"","min":"0","max":"0"},
+    {"register":"31029","factor":"1","size":"u8","mode":"R","titel":"Antal tillsats steg som är aktiva","info":"Av/På","unit":"","min":"0","max":"0"},
     {"register":"31025","factor":"10","size":"s32","mode":"R","titel":"Total tillsats tid","info":"","unit":"h","min":"0","max":"0"},
     {"register":"31028","factor":"1","size":"u8","mode":"R","titel":"Driftprio","info":"Av/VV/Värme/Pool/Kyla 10/20/30/40/60","unit":"","min":"0","max":"0"},
-    {"register":"31083","factor":"1","size":"s32","mode":"R","titel":"Kompressorstarter EP14","info":"","unit":"","min":"0","max":"0"},
     {"register":"31087","factor":"10","size":"s32","mode":"R","titel":"Kompressor tid EP14","info":"","unit":"h","min":"0","max":"0"},
     {"register":"30050","factor":"10","size":"u32","mode":"R","titel":"Ström BE1","info":"","unit":"A","min":"0","max":"0"},
     {"register":"30048","factor":"10","size":"u32","mode":"R","titel":"Ström BE2","info":"","unit":"A","min":"0","max":"0"},
@@ -82,8 +80,6 @@
     {"register":"30038","factor":"10","size":"s16","mode":"R","titel":"BT52 Temp panna","info":"","unit":"°C","min":"0","max":"0"},
     {"register":"31034","factor":"1","size":"u8","mode":"R","titel":"QN11 Shuntventil","info":"Av/Aktiv/Passiv/Öppnar/Stänger/Kyla 10/20/30/40/50","unit":"","min":"0","max":"0"},
     {"register":"31066","factor":"1","size":"u8","mode":"R","titel":"GP10 cirkpump värme externt","info":"Av/På","unit":"","min":"0","max":"0"},
-    {"register":"31029","factor":"1","size":"u8","mode":"R","titel":"Stegstyrd typ Elk26/42","info":"Av/På","unit":"","min":"0","max":"0"},
-    {"register":"30039","factor":"10","size":"s16","mode":"R","titel":"BT25 extern fram","info":"","unit":"°C","min":"0","max":"0"},
     {"register":"30088","factor":"10","size":"s16","mode":"R","titel":"BT25 extern retur","info":"","unit":"°C","min":"0","max":"0"},
     {"register":"30087","factor":"10","size":"s16","mode":"R","titel":"BT70 tempgivare utgående VV","info":"","unit":"°C","min":"0","max":"0"},
     {"register":"31063","factor":"1","size":"u8","mode":"R","titel":"GP11 cirkpump VVC","info":"Av/På","unit":"","min":"0","max":"0"},
@@ -97,6 +93,5 @@
     {"register":"30027","factor":"10","size":"s16","mode":"R","titel":"BT51 Tempgivare pool","info":"","unit":"°C","min":"0","max":"0"},
     {"register":"31134","factor":"1","size":"u8","mode":"R","titel":"QN19 växelventil pool","info":"Av/På","unit":"","min":"0","max":"0"},
     {"register":"31828","factor":"1","size":"u8","mode":"R","titel":"GP9 cirkpump pool","info":"Av/På","unit":"","min":"0","max":"0"},
-    {"register":"31589","factor":"1","size":"u8","mode":"R","titel":"GP12 Laddpump pool","info":"Av/På","unit":"","min":"0","max":"0"},
-    {"register":"30088","factor":"10","size":"s16","mode":"R","titel":"BT71 Extern retur","info":"","unit":"°C","min":"0","max":"0"}
+    {"register":"31589","factor":"1","size":"u8","mode":"R","titel":"GP12 Laddpump pool","info":"Av/På","unit":"","min":"0","max":"0"}
 ]

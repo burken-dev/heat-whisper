@@ -15,5 +15,10 @@
   "VVM320": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
   "VVM325": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
   "VVM500": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
-  "SMO40": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16}
+  "SMO40": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "Thermia_Genesis": {"protocol": "modbus_rtu", "baud": 19200, "parity": "EVEN", "address": 1, "write_fc": 16},
+  "Dimplex_WPM": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 6},
+  "Daikin_Altherma3": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "Mitsubishi_Ecodan": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "Lambda_EUL": {"protocol": "modbus_rtu", "baud": 19200, "parity": "EVEN", "address": 1, "write_fc": 16}
 }

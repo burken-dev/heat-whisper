@@ -430,7 +430,7 @@
 {"register":"40881","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system8","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
 {"register":"40882","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system7","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
 {"register":"40883","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system6","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
-{"register":"40884","factor":1,"size":"u8","mode":"R/W","titel":"","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
+{"register":"40884","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system5","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
 {"register":"40885","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system4","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
 {"register":"40886","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system3","info":"System affected by paralell change","unit":"","min":"0","max":"1"},
 {"register":"40887","factor":1,"size":"u8","mode":"R/W","titel":"=+Adjust Affect system2","info":"System affected by paralell change","unit":"","min":"0","max":"1"},

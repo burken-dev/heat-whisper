@@ -121,7 +121,9 @@ heatwhisper:
 
 Nibe MODBUS40 wiring: MODBUS40 accessory X2 terminals → RS485 A/B transceiver, 9600 8N1; enable MODBUS40 in the pump installer menu. Writes to MODBUS40 models use FC16 only, never FC06 (enforced from `transports.json` `write_fc`). Bring-up order: flash with `passive: true` first to sniff/decode bus traffic, confirm values in logs/`web_server`, then enable TX (`passive: false`). The picker (`/heatwhisper/registers`) tags each model with `"proto": "nibe"|"modbus"` and, in modbus mode, lists the configured model's registers.
 
-## Build / test
+Lambda EU-L (EU08/13/15/20/35L) needs no accessory (native RTU); bridge default is 19200 EVEN (see `transports.json`). Writes use FC16 only. Buffer demand regs 3006–3008 (+3009) must be written together in one FC16.
+
+## Build / test / release
 
 ```bash
 python -m pytest tests/ -v

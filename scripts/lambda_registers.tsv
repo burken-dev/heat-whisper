@@ -1,0 +1,64 @@
+register	titel	unit	size	factor	mode	min	max	info
+0	Error Number		s16	1	R	0	0	general
+1	Operating Mode		u16	1	R	0	0	general
+2	Outdoor Temperature	°C	s16	10	R/W	0	0	general; PDF table W-only, readable per §2 (FC03 open for all registers)
+3	Outdoor Temperature 1h Average	°C	s16	10	R	0	0	general
+4	Calculated Outdoor Temperature	°C	s16	10	R	0	0	general
+100	Error Number		s16	1	R	0	0	e-manager
+101	Operating Mode		u16	1	R	0	0	e-manager
+102	Grid Import/Export	W	u16	1	R/W	0	0	e-manager; PV-surplus feed per §4.3 (table shows R-only)
+103	Power Consumption (All Heat Pumps)	W	s16	1	R	0	0	e-manager
+104	Total Power Setpoint	W	s16	1	R	0	0	e-manager
+1000	Error State		u16	1	R	0	0	heat-pump-0
+1001	Error Number		s16	1	R	0	0	heat-pump-0
+1002	Heat Pump Status		u16	1	R	0	0	heat-pump-0
+1003	Operating State		u16	1	R	0	0	heat-pump-0
+1004	Flow Temperature	°C	s16	100	R	0	0	heat-pump-0
+1005	Return Temperature	°C	s16	100	R	0	0	heat-pump-0
+1006	Heating-Side Flow Rate	l/min	s16	100	R	0	0	heat-pump-0
+1007	Source Inlet Temperature	°C	s16	100	R	0	0	heat-pump-0
+1008	Source Outlet Temperature	°C	s16	100	R	0	0	heat-pump-0
+1009	Source Flow Rate	m3/h	s16	100	R	0	0	heat-pump-0
+1010	Compressor Rating	%	u16	100	R	0	0	heat-pump-0
+1011	Heating Output Power	kW	s16	10	R	0	0	heat-pump-0
+1012	Inverter Power Consumption	W	s16	1	R	0	0	heat-pump-0
+1013	Efficiency (COP)	%	u16	100	R	0	0	heat-pump-0; PDF prints INT16, u16 per test contract (value always >= 0)
+1019	E-Heater Relay State		s16	1	R	0	1	heat-pump-0
+1020	Total Electrical Energy (VdA)	Wh	u32	1	R	0	0	heat-pump-0; INT32 pair 1020/1021, ABCD
+1022	Total Thermal Energy (VdA)	Wh	u32	1	R	0	0	heat-pump-0; INT32 pair 1022/1023, ABCD
+2000	Error Number		s16	1	R	0	0	dhw-0
+2001	Operating Mode		u16	1	R	0	0	dhw-0
+2002	DHW Top Temperature	°C	s16	10	R	0	0	dhw-0
+2003	DHW Bottom Temperature	°C	s16	10	R	0	0	dhw-0
+2004	Circulation Temperature	°C	s16	10	R	0	0	dhw-0
+2005	Circulation Pump State		s16	1	R	0	1	dhw-0
+2050	DHW Setpoint Temperature	°C	s16	10	R/W	0	0	dhw-0
+3000	Error Number		s16	1	R	0	0	buffer-0
+3001	Operating Mode		u16	1	R	0	0	buffer-0
+3002	Buffer Top Temperature	°C	s16	10	R	0	0	buffer-0
+3003	Buffer Bottom Temperature	°C	s16	10	R	0	0	buffer-0
+3004	Buffer Setpoint via Modbus	°C	s16	10	R/W	0	90	buffer-0; PDF table W-only, readable per §2
+3005	Demand Type		s16	1	R/W	-1	3	buffer-0
+3006	Demand Flow Temperature	°C	s16	10	R/W	0	0	buffer-0; demand-block: write 3006-3008 together in one FC16 (§4.2)
+3007	Demand Return Temperature	°C	s16	10	R/W	0	0	buffer-0; demand-block: write 3006-3008 together in one FC16 (§4.2)
+3008	Demand Spread	K	s16	10	R/W	0	0	buffer-0; demand-block: write 3006-3008 together in one FC16 (§4.2)
+3009	Demand Output Power	kW	s16	10	R/W	0	0	buffer-0; optional demand-block member, same FC16 write (§4.2)
+3050	Buffer Max Temperature	°C	s16	10	R/W	25	65	buffer-0
+4000	Error Number		s16	1	R	0	0	solar-0
+4001	Operating Mode		u16	1	R	0	0	solar-0
+4002	Collector Temperature	°C	s16	10	R	0	0	solar-0
+4003	Solar Tank 1 Temperature	°C	s16	10	R	0	0	solar-0
+4004	Solar Tank 2 Temperature	°C	s16	10	R	0	0	solar-0
+4050	Solar Tank Max Temperature	°C	s16	10	R/W	25	90	solar-0
+4051	Solar Tank Switchover Temperature	°C	s16	10	R/W	25	90	solar-0
+5000	Error Number		s16	1	R	0	0	heating-circuit-0
+5001	Operating Mode		u16	1	R	0	0	heating-circuit-0
+5002	HC Flow Temperature	°C	s16	10	R	0	0	heating-circuit-0
+5003	HC Return Temperature	°C	s16	10	R	0	0	heating-circuit-0
+5004	Room Temperature	°C	s16	10	R/W	-29.9	99.9	heating-circuit-0
+5005	Flow Setpoint Temperature	°C	s16	10	R/W	7.0	65.0	heating-circuit-0
+5006	HC Operating Mode		s16	1	R/W	0	7	heating-circuit-0; enum values 1/7 are R-only per table (0/2-6 RW)
+5007	Calculated Flow Temperature	°C	s16	10	R	0	0	heating-circuit-0
+5050	Heating Curve Offset	°C	s16	10	R/W	-10	10	heating-circuit-0
+5051	Room Setpoint (Heating)	°C	s16	10	R/W	15	40	heating-circuit-0
+5052	Room Setpoint (Cooling)	°C	s16	10	R/W	15	40	heating-circuit-0
