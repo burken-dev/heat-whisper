@@ -25,7 +25,7 @@ Register maps live in `components/heatwhisper/models/*.json` (one file per model
 
 ## What you need
 
-- ESP32 or Raspberry Pi Pico W
+- ESP32, ESP32-S3 RS485-CAN, or Raspberry Pi Pico W
 - RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1)
 - NIBE pump with a free RS485 port
 - Home Assistant with the ESPHome integration
@@ -33,9 +33,10 @@ Register maps live in `components/heatwhisper/models/*.json` (one file per model
 | Board | TX | RX | Flashing |
 |---|---|---|---|
 | ESP32 (`esp32dev`) | GPIO17 | GPIO16 | `esphome run` or web flasher (`index.html`) |
+| ESP32-S3 RS485-CAN (`esp32-s3-devkitc-1`) | GPIO17 | GPIO18 (EN GPIO21) | `esphome run` or web flasher (`index.html`) |
 | Pico W (`rpipicow`) | GPIO4 | GPIO5 | `firmware.uf2` via USB mass-storage (BOOTSEL) |
 
-Optional `flow_control_pin` (e.g. GPIO18) for transceivers needing manual direction control. Without it, an auto-direction transceiver is assumed.
+Optional `flow_control_pin` (e.g. GPIO18) for transceivers needing manual direction control. Without it, an auto-direction transceiver is assumed. The S3 RS485-CAN package sets `flow_control_pin: GPIO21` (onboard transceiver needs manual DE — not auto-direction).
 
 ## Getting started
 
@@ -128,11 +129,13 @@ Lambda EU-L (EU08/13/15/20/35L) needs no accessory (native RTU); bridge default 
 ```bash
 python -m pytest tests/ -v
 esphome config heatwhisper_esp32.yaml
+esphome config heatwhisper_esp32_s3_rs485.yaml
 esphome compile heatwhisper_esp32.yaml
+esphome compile heatwhisper_esp32_s3_rs485.yaml
 esphome compile heatwhisper_pico_w.yaml
 ```
 
-CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` both boards → artifacts on tags attached to the GitHub release + deployed to GitHub Pages (web flasher).
+CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all three boards → artifacts on tags attached to the GitHub release + deployed to GitHub Pages (web flasher).
 
 ## Troubleshooting
 

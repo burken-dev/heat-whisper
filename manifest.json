@@ -4,6 +4,7 @@
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": true,
   "builds": [
-    { "chipFamily": "ESP32", "parts": [{ "path": "heatwhisper_esp32.factory.bin", "offset": 0 }] }
+    { "chipFamily": "ESP32", "parts": [{ "path": "heatwhisper_esp32.factory.bin", "offset": 0 }] },
+    { "chipFamily": "ESP32-S3", "parts": [{ "path": "heatwhisper_esp32_s3_rs485.factory.bin", "offset": 0 }] }
   ]
 }
