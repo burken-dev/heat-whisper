@@ -1,0 +1,19 @@
+{
+  "_note": "Per-model Modbus-RTU transport defaults. Nibe F-family via MODBUS40 accessory (installer manual + ModbusManager DB).",
+  "F1145": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F1155": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F1245": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F1255": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F1345": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F1355": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F370": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F470": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F730": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "F750": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "VVM225": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "VVM310": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "VVM320": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "VVM325": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "VVM500": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16},
+  "SMO40": {"protocol": "modbus_rtu", "baud": 9600, "parity": "NONE", "address": 1, "write_fc": 16}
+}

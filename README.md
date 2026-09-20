@@ -90,6 +90,19 @@ Breaking change: the per-register `Enable …` switches and the `esphome.on_boot
 
 MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its single native state topic automatically. No `/json`+`/raw` triple spam. Optional: `topic_prefix: "heatwhisper"` for a custom prefix (default is the node name); HA discovery is automatic, `discovery: false` disables it.
 
+## Modbus-RTU (non-Nibe and Nibe MODBUS40)
+
+Nibe F-family maps double as MODBUS40 maps (same register numbers). The bridge polls as Modbus master behind `protocol: modbus_rtu`:
+
+```yaml
+heatwhisper:
+  protocol: modbus_rtu
+  model: F750        # required in modbus mode
+  modbus_address: 1  # peer address
+```
+
+Nibe MODBUS40 wiring: MODBUS40 accessory X2 terminals → RS485 A/B transceiver, 9600 8N1; enable MODBUS40 in the pump installer menu. Writes to MODBUS40 models use FC16 only, never FC06 (enforced from `transports.json` `write_fc`). Bring-up order: flash with `passive: true` first to sniff/decode bus traffic, confirm values in logs/`web_server`, then enable TX (`passive: false`). The picker (`/heatwhisper/registers`) tags each model with `"proto": "nibe"|"modbus"` and, in modbus mode, lists the configured model's registers.
+
 ## Build / test / release
 
 ```bash

@@ -77,7 +77,10 @@ static_assert(sizeof(HeatWhisperSelection{}) == 108, "HeatWhisperSelection layou
 static_assert(50 == HW_MAX_SELECTION, "selection slots match catalog cap");
 class HeatWhisperComponent : public esphome::Component, public esphome::uart::UARTDevice {
   public:
-  void set_slave_address(uint8_t a) { slave_ = a; }
+  void set_slave_address(uint8_t a) { peer_ = a; }
+  void set_protocol_is_modbus(bool m) { modbus_ = m; }
+  void set_peer_address(uint8_t a) { peer_ = a; }
+  void set_model(const std::string &m) { model_ = m; }
   void set_passive(bool p) { passive_ = p; }
   void set_flow_control_pin(esphome::GPIOPin *p) { flow_pin_ = p; }
   void setup() override;
@@ -97,7 +100,9 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
+  bool is_modbus() const { return modbus_; }
   void loop() override;
+  static uint16_t crc16_modbus(const uint8_t *d, size_t n);
   // calc_crc_nibe: 5C-framed pump frames [5C,X,ADDR,CMD,LEN,DATA,CHK], LEN at [4].
   static uint8_t calc_crc_nibe(const uint8_t *d) {
     uint8_t c = 0;
@@ -112,14 +117,28 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   }
  protected:
   void on_frame_(const uint8_t *f, uint8_t n);
+  void poll_one_();
+  void on_modbus_frame_(const uint8_t *f, size_t n);
+  uint8_t write_fc_for_model_() const;
+  bool decode_modbus_(uint16_t addr, const uint16_t *words, uint8_t nwords, float *out) const;
   void tx_(const uint8_t *d, size_t len);
   void send_ack_() { uint8_t b = 0x06; tx_(&b, 1); }
   void send_nack_() { uint8_t b = 0x15; tx_(&b, 1); }
-  uint8_t slave_{0x19};
+  uint8_t peer_{0x19};  // renamed from slave_: Nibe RMU addr or Modbus peer addr
+  bool modbus_{false};
+  uint32_t last_poll_{0};
+  uint8_t retry_{0};
+  std::vector<uint16_t> polled_;
+  size_t poll_idx_{0};
+  uint16_t pending_addr_{0};
+  uint8_t pending_fc_{0};
+  uint8_t pending_cnt_{0};
+  bool pending_{false};
   bool passive_{false};
   esphome::GPIOPin *flow_pin_{nullptr};
   std::string model_;
   std::vector<uint8_t> rx_;
+  std::vector<uint8_t> mrx_;
   std::queue<WriteRequest> writes_;
   std::queue<std::vector<uint8_t>> reads_;
   std::vector<HeatWhisperSensor *> sensors_;

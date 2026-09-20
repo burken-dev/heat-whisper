@@ -44,6 +44,26 @@ def load_hints(path):
     with open(path) as fh:
         return _json.load(fh)
 
+def load_transports(path):
+    with open(path) as fh:
+        return {k: v for k, v in _json.load(fh).items() if not k.startswith("_")}
+
+_FC_ALLOWED = (1, 2, 3, 4)
+_WO_CODES = {"ABCD": 0, "CDAB": 1}
+_PARITY_CODES = {"NONE": 0, "EVEN": 1, "ODD": 2}
+
+
+def _fc_of(r):
+    try:
+        fc = int(r.get("mb_fc", 3))
+    except (TypeError, ValueError):
+        return 3
+    return fc if fc in _FC_ALLOWED else 3
+
+
+def _wo_of(r):
+    return _WO_CODES.get(str(r.get("word_order", "ABCD")).upper(), 0)
+
 def normalize_model(name):
     out = "".join(c for c in (name or "").upper() if c.isalnum())
     return out
@@ -86,7 +106,7 @@ def validate_selection(addrs, models):
 def _esc(s):
     return (s or "").replace("\\", "\\\\").replace('"', '\\"')
 
-def generate_catalog_header(models, hints):
+def generate_catalog_header(models, hints, transports=None):
     by_reg = _by_reg(models)
     addrs = sorted({int(r["register"]) for regs in models.values() for r in regs})
     titles = {}
@@ -95,14 +115,16 @@ def generate_catalog_header(models, hints):
             titles.setdefault(r["register"], (r.get("titel") or f"Register {r['register']}",
                                               (r.get("unit") or "").replace("�", "°")))
     lines = ["#pragma once", '#include <stdint.h>',
-             "struct HwMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; };",
+             "struct HwMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; uint8_t fc; uint8_t wo; };",
              "struct HwTitle { uint16_t addr; const char *title; const char *unit; };",
              "struct HwModel { const char *name; const uint16_t *addrs; uint16_t n; };",
-             "struct HwHint { uint16_t addr; uint8_t kind; const char *opts; };"]
+             "struct HwHint { uint16_t addr; uint8_t kind; const char *opts; };",
+             "struct HwTransport { uint8_t model_idx; uint32_t baud; uint8_t parity; uint8_t addr; uint8_t write_fc; };"]
     entries = ",".join(
         f"{{{a},{_num(by_reg[str(a)].get('factor', 1))},"
         f"{SIZE_CODES.get(by_reg[str(a)].get('size') or 's16', SIZE_CODES['s16'])},"        f"{1 if by_reg[str(a)].get('mode') == 'R/W' else 0},"
-        f"{_num(by_reg[str(a)].get('min', 0))},{_num(by_reg[str(a)].get('max', 0))}}}"
+        f"{_num(by_reg[str(a)].get('min', 0))},{_num(by_reg[str(a)].get('max', 0))},"
+        f"{_fc_of(by_reg[str(a)])},{_wo_of(by_reg[str(a)])}}}"
         for a in addrs)
     lines.append(f"static const HwMeta HW_META[] = {{{entries}}};")
     lines.append(f"static const uint16_t HW_META_N = {len(addrs)};")
@@ -129,4 +151,15 @@ def generate_catalog_header(models, hints):
     lines.append(f"static const uint16_t HW_DEFAULTS[] = {{{','.join(map(str, DEFAULT_ENABLED))}}};")
     lines.append(f"static const uint8_t HW_DEFAULTS_N = {len(DEFAULT_ENABLED)};")
     lines.append(f"static const uint8_t HW_MAX_SELECTION = {MAX_SELECTION};")
+    names = [m for m, _ in sorted(models.items())]  # same order as HW_MODELS rows
+    trows = []
+    for i, m in enumerate(names):
+        t = (transports or {}).get(m)
+        if t is None:
+            continue  # ponytail: no sidecar entry = no Modbus row, C++ treats as unsupported
+        trows.append(f"{{{i},{int(t.get('baud', 9600))},"
+                      f"{_PARITY_CODES.get(str(t.get('parity', 'NONE')).upper(), 0)},"
+                      f"{int(t.get('address', 1))},{int(t.get('write_fc', 16))}}}")
+    lines.append(f"static const HwTransport HW_TRANSPORTS[] = {{{','.join(trows)}}};")
+    lines.append(f"static const uint8_t HW_TRANSPORTS_N = {len(trows)};")
     return "\n".join(lines) + "\n"
