@@ -28,6 +28,47 @@ bool HeatWhisperComponent::save_selection(const uint16_t *addrs, uint16_t n) {
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperSelection>(HW_SEL_TYPE, true);
   return pref.save(&s);
 }
+static const uint32_t HW_MODE_TYPE = 0x68776D6FUL;  // keep: runtime mode survives OTA
+bool HeatWhisperComponent::load_mode(HeatWhisperMode *out) {
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperMode>(HW_MODE_TYPE, true);
+  if (!pref.load(out) || out->version != 1 || out->mode > 1) return false;
+  out->model[sizeof(out->model) - 1] = '\0';
+  return true;
+}
+bool HeatWhisperComponent::save_mode(uint8_t mode, const char *model) {
+  if (mode > 1 || model == nullptr) return false;
+  HeatWhisperMode m{};
+  m.version = 1;
+  m.mode = mode;
+  strncpy(m.model, model, sizeof(m.model) - 1);
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperMode>(HW_MODE_TYPE, true);
+  return pref.save(&m);
+}
+// apply_runtime_mode_: flash override wins over codegen; runs before entities
+// so list_json_/create_entities see the effective mode. Nibe (0) clears any
+// stale codegen model so "not heard yet" reads correctly.
+void HeatWhisperComponent::apply_runtime_mode_() {
+  HeatWhisperMode m{};
+  if (!load_mode(&m)) return;
+  if (m.mode == 0) {
+    modbus_ = false;
+    model_.clear();
+    return;
+  }
+  if (m.model[0] == '\0') return;
+  for (uint8_t i = 0; i < HW_MODELS_N; i++) {
+    if (strcmp(m.model, HW_MODELS[i].name) != 0) continue;
+    for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++) {
+      if (HW_TRANSPORTS[t].model_idx == i) {
+        modbus_ = true;
+        model_ = m.model;
+        peer_ = HW_TRANSPORTS[t].addr;
+        return;
+      }
+    }
+    return;  // known model but not modbus-capable: ignore override
+  }
+}
 // Post-Task-5 name authority: factory names for the 18 HW_DEFAULTS addrs,
 // copied verbatim from packages/base.yaml so HA entity names stay identical.
 // Task 5 deletes the YAML blocks; this table is then the single source.
@@ -150,6 +191,7 @@ void HeatWhisperComponent::setup() {
     flow_pin_->setup();
     flow_pin_->digital_write(false);
   }
+  apply_runtime_mode_();
   create_entities();
 }
 void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
@@ -571,6 +613,10 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>HeatWhisper registers</title>
 <style>body{font-family:sans-serif;max-width:60em;margin:1em auto}li{list-style:none}.k{color:#888;font-size:.8em}</style>
 </head><body><h1>HeatWhisper register picker</h1><p id="note"></p>
+<div id="mbanner" style="background:#fff8e1;padding:.5em"></div>
+<details id="mdet"><summary>Modbus-RTU setup (advanced)</summary>
+<p><select id="mm"></select> <button id="mgo">Detect &amp; save</button>
+<button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
@@ -578,19 +624,32 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 const Q=document.getElementById('q'),E=document.getElementById('eo'),L=document.getElementById('list'),
 C=document.getElementById('count'),N=document.getElementById('note'),M=document.getElementById('msg'),
 S=document.getElementById('save');let regs=[];
+const MM=document.getElementById('mm'),MG=document.getElementById('mgo'),
+MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
+DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
 L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
 .map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+
 ' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
 fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
-N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model+' ('+(j.proto||'nibe')+')';render();});
+N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model+' ('+(j.proto||'nibe')+')';
+MM.innerHTML=(j.modbus_models||[]).map(m=>'<option>'+esc(m)+'</option>').join('');
+if(j.runtime&&j.runtime.model)MM.value=j.runtime.model;
+if(j.suggest_modbus){DET.open=true;
+BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 accessory)? Pick the model, Detect & save, then reboot.';}
+else BAN.textContent='';render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
 M.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()})
 .catch(e=>M.textContent='Save failed: '+e);};
 Q.oninput=render;E.onchange=render;
+function mpost(b,ok){fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+body:b}).then(async r=>{GM.textContent=r.ok?ok:'Save failed: '+await r.text()}).catch(e=>GM.textContent='Save failed: '+e);}
+MG.onclick=()=>mpost('mode=modbus&model='+encodeURIComponent(MM.value),
+'Saved. Reboot via ESPHome restart to apply — values should appear within ~30s.');
+MN.onclick=()=>mpost('mode=nibe','Saved. Reboot via ESPHome restart to apply.');
 </script></body></html>)HTML";
 bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #ifdef USE_ESP32
@@ -601,10 +660,21 @@ bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #endif
   auto m = request->method();
   return (m == HTTP_GET && url == ESPHOME_F("/heatwhisper/registers")) ||
-         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/save"));
+         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/save")) ||
+         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/mode"));
 }
 void HeatWhisperPickerHandler::handleRequest(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
+#ifdef USE_ESP32
+    char url_buf[AsyncWebServerRequest::URL_BUF_SIZE];
+    StringRef url = request->url_to(url_buf);
+#else
+    const auto &url = request->url();
+#endif
+    if (url == ESPHOME_F("/heatwhisper/registers/mode")) {
+      this->handle_mode_save_(request);
+      return;
+    }
     this->handle_save_(request);
     return;
   }
@@ -706,6 +776,27 @@ std::string HeatWhisperPickerHandler::list_json_() const {
     o += modbus_capable ? "modbus" : "nibe";
     o += "\"}";
   }
+  // Runtime Modbus override (no recompile): effective mode + model echo, plus
+  // suggest_modbus while no NIBE announcement heard — the page emphasizes the
+  // Modbus section then, collapses it once a model is known.
+  const std::string &rmodel = this->parent_->get_model();
+  o += "],\"runtime\":{\"mode\":\"";
+  o += this->parent_->is_modbus() ? "modbus" : "nibe";
+  o += "\",\"model\":\"";
+  picker_esc_(o, rmodel.c_str());
+  o += "\"},\"suggest_modbus\":";
+  o += rmodel.empty() ? '1' : '0';
+  o += ",\"modbus_models\":[";
+  bool mfirst = true;
+  for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++) {
+    uint8_t mi = HW_TRANSPORTS[t].model_idx;
+    if (mi >= HW_MODELS_N) continue;
+    if (!mfirst) o += ',';
+    mfirst = false;
+    o += '"';
+    picker_esc_(o, HW_MODELS[mi].name);
+    o += '"';
+  }
   o += "]}";
   return o;
 }
@@ -744,6 +835,37 @@ void HeatWhisperPickerHandler::handle_save_(AsyncWebServerRequest *request) {
     return;
   }
   if (!this->parent_->save_selection(addrs, count)) {
+    request->send(500, "text/plain", "save failed");
+    return;
+  }
+  request->send(200, "text/plain", "saved,reboot");
+}
+void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request) {
+  std::string mode = request->hasArg("mode") ? request->arg("mode").c_str() : std::string();
+  std::string model = request->hasArg("model") ? request->arg("model").c_str() : std::string();
+  if (mode == "nibe") {  // back to autodetect; clears any stale override model
+    if (!this->parent_->save_mode(0, "")) {
+      request->send(500, "text/plain", "save failed");
+      return;
+    }
+    request->send(200, "text/plain", "saved,reboot");
+    return;
+  }
+  if (mode != "modbus" || model.empty() || model.size() >= 24) {
+    request->send(400, "text/plain", "need mode=nibe|modbus and a modbus model");
+    return;
+  }
+  bool ok = false;  // must be a transports entry, not just any catalog model
+  for (uint8_t i = 0; i < HW_MODELS_N && !ok; i++) {
+    if (model != HW_MODELS[i].name) continue;
+    for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++)
+      if (HW_TRANSPORTS[t].model_idx == i) { ok = true; break; }
+  }
+  if (!ok) {
+    request->send(400, "text/plain", "unknown modbus model");
+    return;
+  }
+  if (!this->parent_->save_mode(1, model.c_str())) {
     request->send(500, "text/plain", "save failed");
     return;
   }
