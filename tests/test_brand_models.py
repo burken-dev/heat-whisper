@@ -35,6 +35,18 @@ def test_thermia_core_registers():
     assert m["30016"]["mode"] == "R"                                 # DHW temp
     assert any(r["mb_fc"] == 1 for r in m.values())                  # coils exist
 
+def test_daikin_core_registers():
+    # Intesis IN485DAI001A000 manual v1.0.2 §8.2.7/8.2.6/8.2.3/8.2.4, PLC (base1)
+    # addrs (wire = reg - 1): outlet-water=307, DHW-tank=286, outdoor=305 (R);
+    # Zones mode=143 (R/W), zone-1 setpoint=161 (R/W); x10 temps (SW2-P7 ON).
+    m = _regs("Daikin_Altherma3")
+    assert m["307"]["unit"] == "°C" and m["307"]["mode"] == "R"  # leaving-water temp
+    assert m["286"]["mode"] == "R"                               # DHW tank temp
+    assert m["305"]["mode"] == "R"                               # outdoor temp
+    assert m["305"]["size"] == "s16" and m["305"]["factor"] == 10
+    assert m["143"]["mode"] == "R/W"                             # zones mode
+    assert m["161"]["mode"] == "R/W"                             # zone-1 setpoint
+
 def test_dimplex_core_registers():
     # WPM software J/L/M numbering (1...207 address-range mode; extended regs
     # up to 352 for newer datapoints) per official Dimplex wiki "Modbus RTU
