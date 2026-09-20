@@ -34,3 +34,15 @@ def test_thermia_core_registers():
     assert m["30013"]["mode"] == "R"                                 # flow temp
     assert m["30016"]["mode"] == "R"                                 # DHW temp
     assert any(r["mb_fc"] == 1 for r in m.values())                  # coils exist
+
+def test_dimplex_core_registers():
+    # WPM software J/L/M numbering (1...207 address-range mode; extended regs
+    # up to 352 for newer datapoints) per official Dimplex wiki "Modbus RTU
+    # connection (EN)": outside=1, DHW=3, flow=5; operation mode=222 (R/W).
+    m = _regs("Dimplex_WPM")
+    assert m["1"]["unit"] == "°C" and m["1"]["mode"] == "R"  # outside temp
+    assert m["5"]["mode"] == "R"                             # flow temp
+    assert m["3"]["mode"] == "R"                             # DHW temp
+    assert m["1"]["size"] == "s16" and m["1"]["factor"] == 10
+    assert m["5"]["factor"] == 10 and m["3"]["factor"] == 10
+    assert m["222"]["mode"] == "R/W"                         # operation mode
