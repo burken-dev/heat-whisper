@@ -101,7 +101,7 @@ MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): eac
 
 ## Modbus-RTU (advanced: non-Nibe and Nibe MODBUS40)
 
-Default is NIBE slave with autodetect — most users stop here. Only for MODBUS40 accessory or non-NIBE pumps (Lambda/Thermia/…), the bridge polls as Modbus master behind `protocol: modbus_rtu`:
+Default is NIBE slave with autodetect — most users stop here. Only for MODBUS40 accessory or non-NIBE pumps (Lambda/Thermia/…), open `http://<node>/heatwhisper/registers`, pick the model under Modbus-RTU setup, Detect & save, reboot. No recompile; the section is emphasized while no NIBE model is heard. YAML alternative (recompile):
 
 ```yaml
 heatwhisper:

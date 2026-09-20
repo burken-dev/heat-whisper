@@ -71,6 +71,15 @@ struct HeatWhisperSelection {
   uint16_t count{0};
   uint16_t addrs[50];
 };
+// Runtime Modbus override: YAML stays default nibe; picker saves {mode,model}
+// to flash, reboot applies it. mode 0=nibe, 1=modbus. model fits the longest
+// transports key ("Mitsubishi_Ecodan", 17) + NUL.
+struct HeatWhisperMode {
+  uint32_t version{1};
+  uint8_t mode{0};
+  char model[24]{};
+};
+static_assert(sizeof(HeatWhisperMode{}) == 32, "HeatWhisperMode layout");
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
 // (verified with host g++); NVS save/load use sizeof consistently so the
 // trailing pad bytes are harmless.
@@ -98,6 +107,8 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void add_switch(HeatWhisperSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
   bool load_selection(HeatWhisperSelection *out);
   bool save_selection(const uint16_t *addrs, uint16_t n);
+  bool load_mode(HeatWhisperMode *out);
+  bool save_mode(uint8_t mode, const char *model);
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
@@ -109,6 +120,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   // calc_crc_c0_nibe: C0-framed slave frames [C0,CMD,LEN,DATA,CHK], LEN at [2].
   static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
+  void apply_runtime_mode_();
   void on_frame_(const uint8_t *f, uint8_t n);
   void poll_one_();
   void on_modbus_frame_(const uint8_t *f, size_t n);

@@ -48,6 +48,10 @@ heatwhisper:
   # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
   # Modbus-RTU mode, advanced only (non-Nibe, or Nibe via MODBUS40 accessory):
+  # No recompile needed: open http://<node>/heatwhisper/registers, pick the
+  # model under Modbus-RTU setup, Detect & save, reboot. The section is
+  # emphasized while no NIBE model is heard, collapses once one is.
+  # YAML alternative (recompile):
   #   protocol: modbus_rtu
   #   model: F750        # required in modbus mode (must be a transports.json entry)
   #   modbus_address: 1  # peer address

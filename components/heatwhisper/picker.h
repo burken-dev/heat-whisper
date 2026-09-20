@@ -22,6 +22,7 @@ class HeatWhisperPickerHandler final : public AsyncWebHandler, public Component 
  protected:
   std::string list_json_() const;
   void handle_save_(AsyncWebServerRequest *request);
+  void handle_mode_save_(AsyncWebServerRequest *request);
   web_server_base::WebServerBase *base_;
   HeatWhisperComponent *parent_;
 };
