@@ -20,3 +20,17 @@ def test_model_schema_valid(name):
         assert r["register"] not in seen, r
         seen.add(r["register"])
         assert r.get("titel"), r
+
+
+def _regs(name):
+    return {r["register"]: r for r in json.load(open(os.path.join(MDIR, name + ".json")))}
+
+def test_thermia_core_registers():
+    # De-facto addresses per official Genesis 13 PDF (ACMBDH01UG0102, Atlas/Calibra/
+    # Diplomat Inverter on Genesis platform): brief's 507/515/522 numbering is not
+    # in this spec version; input-reg pos 12/13/15 -> de-facto 30013/30014/30016.
+    m = _regs("Thermia_Genesis")
+    assert m["30014"]["unit"] == "°C" and m["30014"]["mode"] == "R"  # outside temp
+    assert m["30013"]["mode"] == "R"                                 # flow temp
+    assert m["30016"]["mode"] == "R"                                 # DHW temp
+    assert any(r["mb_fc"] == 1 for r in m.values())                  # coils exist
