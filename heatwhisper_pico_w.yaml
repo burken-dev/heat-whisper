@@ -1,6 +1,8 @@
 esphome:
   name: heat-whisper-pico
   friendly_name: HeatWhisper Pico
+dashboard_import:
+  package_import_url: github://burken-dev/heat-whisper/heatwhisper_pico_w.yaml@main
 packages:
   base: !include packages/base.yaml
   hw: !include packages/pico_w_base.yaml

@@ -5,19 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HeatWhisper — Flash</title>
 <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
-<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem}code{background:#f0f0f0;padding:0 .3em}</style>
+<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem}code{background:#f0f0f0;padding:0 .3em}li{margin:.4em 0}</style>
 </head>
 <body>
 <h1>HeatWhisper — Flash</h1>
-<h2>ESP32 / ESP32-S3 (WebSerial: Chrome/Edge)</h2>
-<p>ESP32-S3 RS485-CAN: same Install button — the manifest picks the matching build automatically. Wire pump A/B to the onboard screw terminals, power 7–36V, 120Ω jumper ON for a single-drop bus.</p>
-<p>Plug in via USB, click Install, pick the port. Use <code>index.html</code> from <code>https://&lt;user&gt;.github.io/heat-whisper/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost).</p>
+<ol>
+<li><b>Wire power only</b> (leave the pump RS485 disconnected for now). Waveshare ESP32-S3 RS485-CAN: USB-C for flashing, 7–36V screw terminals for running, 120Ω jumper ON for a single-drop bus.</li>
+<li><b>Flash:</b> plug in via USB, click Install, pick the port. The manifest picks ESP32 vs ESP32-S3 automatically. Use <code>https://&lt;user&gt;.github.io/heat-whisper/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost, Chrome/Edge).</li>
+<li><b>Wi-Fi:</b> after flashing, click <b>Configure Wi-Fi</b> in the Install dialog (Improv over USB). Skipped it? Join the fallback AP <code>HeatWhisper</code> (password <code>heatwhisper01</code>) and pick your network in the captive portal.</li>
+<li><b>Connect the pump:</b> wire pump A/B to the onboard screw terminals, power up. The bridge autodetects the NIBE model from its announcement — no model setting, no Modbus vs NIBE choice.</li>
+<li><b>Home Assistant:</b> Settings → Devices &amp; Services → ESPHome — the node appears automatically (no API key on factory image). Click Add.</li>
+<li><b>Pick registers (optional):</b> open <code>http://&lt;node&gt;/heatwhisper/registers</code>, check what to expose (18 defaults, max 50), save, reboot.</li>
+</ol>
 <esp-web-tools-button manifest="./manifest.json"></esp-web-tools-button>
 <h2>Pico W (no WebSerial — RP2040 not supported by ESP Web Tools)</h2>
 <ol>
 <li>Download <code>heatwhisper_pico_w.uf2</code> from the latest GitHub Release.</li>
 <li>Hold BOOTSEL, plug in USB, drop the <code>.uf2</code> onto the mass-storage drive.</li>
+<li>Join Wi-Fi via fallback AP <code>HeatWhisper</code> + captive portal, then add in HA as above.</li>
 </ol>
-<p>First boot: join Wi-Fi via fallback AP <code>HeatWhisper</code> + captive portal, or pre-fill <code>secrets.yaml</code>. Bring-up: flash with <code>passive: true</code> first, confirm decode on <code>web_server</code> :80, then re-flash with TX enabled.</p>
+<p>Advanced: Modbus-RTU (MODBUS40 accessory, Lambda/Thermia/…) needs <code>protocol: modbus_rtu</code> + <code>model:</code> in YAML and a recompile — see README. Troubleshooting: no values → check wiring/A-B swap, then open <code>http://&lt;node&gt;</code> logs; writes ignored below addr 20000 is by design.</p>
 </body>
 </html>

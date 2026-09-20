@@ -21,3 +21,16 @@ def test_catalog_emits_transports_and_fc():
     hdr = generate_catalog_header(_models(), load_hints(os.path.join(TDIR, "entity_hints.json")),
                                   load_transports(os.path.join(TDIR, "transports.json")))
     assert "HW_TRANSPORTS" in hdr and "HW_TRANSPORTS_N" in hdr
+
+def test_nibe_modbus40_allowlist():
+    # MODBUS40 installer manual (art. 067 144) compatible list — nothing more.
+    t = load_transports(os.path.join(TDIR, "transports.json"))
+    nibe = {k for k in t if k[0] in "FSV" or k == "SMO40"}
+    assert nibe == {"F1145", "F1155", "F1245", "F1255", "F1345", "F1355",
+                    "F370", "F470", "F730", "F750",
+                    "VVM225", "VVM310", "VVM320", "VVM325", "VVM500", "SMO40"}
+
+def test_modbus_model_gated_on_transports():
+    # S-series (TCP-only) and accessories must be rejected in modbus_rtu mode.
+    src = open(os.path.join(TDIR, "__init__.py")).read()
+    assert "not in transports" in src

@@ -1,47 +1,57 @@
-# cp secrets.yaml.example secrets.yaml at repo root on first use
+# Factory image is zero-config: no secrets.yaml needed for first flash.
+# Wi-Fi via Improv (USB, web flasher) or fallback AP + captive portal.
+# HA finds the node via native API (no key on factory image).
+esphome:
+  project:
+    name: burken-dev.heat-whisper
+    version: "1.0"
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
   reboot_timeout: 15min
   power_save_mode: none
   ap:
     ssid: "HeatWhisper"
-    password: !secret ap_password
+    password: "heatwhisper01"  # fallback AP, min 8 chars
 captive_portal:
+improv_serial:
 web_server:
   port: 80
-  auth:
-    username: admin
-    password: !secret web_password
+  # ponytail: open on factory image so the register picker works immediately; add auth after adoption if exposed.
 api:
-  encryption:
-    key: !secret api_key
+  # ponytail: open on factory image so HA discovers without an unknown key; add encryption after adoption.
 ota:
   - platform: esphome
-    password: !secret ota_password
 safe_mode:
 logger:
-  baud_rate: 0
+  # ponytail: default baud (not 0) — improv_serial needs logger enabled;
+  # RS485 lives on a separate UART (16/17 or 17/18), so no conflict.
+  baud_rate: 115200
+button:
+  - platform: restart
+    name: "Restart"
+  - platform: factory_reset
+    name: "Factory Reset Wi-Fi"
 
 # HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
 heatwhisper:
   id: heatwhisper_bridge
   uart_id: heatwhisper_uart
-  # Registers are now picked at runtime: open http://<node>/heatwhisper/registers,
+  # Registers are picked at runtime: open http://<node>/heatwhisper/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
   # 18 entities; stored in flash, survives OTA.
-  # Bring-up order: flash with passive: true first, confirm decode in
-  # logs/web_server, then enable TX (passive: false).
+  # First boot: flash once, wire to pump, done. The pump model is autodetected
+  # from its announcement — no model setting needed.
+  # Troubleshooting only: passive: true is listen-only bring-up (decode first,
+  # TX later). Default is TX enabled.
   # passive: true
   # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
   # WARNING: writes to addr <20000 (RMU 1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)
-  # Modbus-RTU mode (non-Nibe, or Nibe via MODBUS40 accessory):
+  # Modbus-RTU mode, advanced only (non-Nibe, or Nibe via MODBUS40 accessory):
   #   protocol: modbus_rtu
-  #   model: F750        # required in modbus mode (Nibe maps double as MODBUS40 maps)
+  #   model: F750        # required in modbus mode (must be a transports.json entry)
   #   modbus_address: 1  # peer address
-  #   UART baud_rate must match the gateway DIP baud (Intesis default 2400; transport 9600 assumes installer configures the gateway or overrides baud).
+  #   UART baud_rate must match the gateway DIP baud.
 
 text_sensor:
   # Autodetected from the pump's 0x6D announcement (empty = not heard yet).
@@ -51,14 +61,17 @@ text_sensor:
     update_interval: 60s
     entity_category: diagnostic
 
-# MQTT opt-in (OFF by default). Add a broker block and each entity above
+# MQTT opt-in (OFF by default). Add a broker block and each entity
 # publishes to its single native state topic (<node>/sensor/<name>/state)
 # automatically — no extra config.
 # Custom topic prefix: topic_prefix: "heatwhisper" (default is <node name>).
 # HA discovery is automatic when mqtt: is present; set discovery: false to disable.
 # mqtt:
-#   broker: !secret mqtt_broker
-#   username: !secret mqtt_user
-#   password: !secret mqtt_password
+#   broker: "YOUR_MQTT_BROKER"
+#   username: "YOUR_MQTT_USER"
+#   password: "YOUR_MQTT_PASSWORD"
 #   topic_prefix: "heatwhisper"
 #   discovery: true
+
+# Hardening after adoption (ESPHome dashboard → adopt → secrets, then OTA):
+# add api encryption key, ota password, and web_server auth here.
