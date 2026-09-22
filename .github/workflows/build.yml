@@ -82,6 +82,24 @@ jobs:
           cp fw/firmware.bin "$DEST"/heatwhisper_pico_w.bin
           cp fw/firmware.uf2 "$DEST"/heatwhisper_pico_w.uf2
           cp fw/heatwhisper_esp32_s3_rs485.factory.bin fw/heatwhisper_esp32_s3_rs485.ota.bin "$DEST"/
+      # Compose both channels so one Pages deploy never wipes the other.
+      - run: |
+          if case "$TAG" in *-beta*) true;; *) false;; esac; then
+            COUNTER=$(gh release list --exclude-drafts --exclude-pre-releases -L 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)
+            OTHER=public
+          else
+            COUNTER=$(gh release list --exclude-drafts -L 50 --json tagName,isPrerelease -q '[.[].tagName | select(test("-beta"))][0]' 2>/dev/null || true)
+            OTHER=public/beta
+          fi
+          if [ -n "$COUNTER" ]; then
+            gh release download "$COUNTER" -D /tmp/other -p 'heatwhisper_*' || true
+            mkdir -p "$OTHER"
+            cp /tmp/other/heatwhisper_* "$OTHER"/ || true
+            OTHER="$OTHER" CVERSION="${COUNTER#v}" python3 -c "import json,os; o=os.environ['OTHER']; m=json.load(open('manifest.json')); m['version']=os.environ['CVERSION']; json.dump(m,open(o+'/manifest.json','w'),indent=2)"
+            cp index.html "$OTHER"/ || true
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v4
         with: { path: public }
       - id: deployment
