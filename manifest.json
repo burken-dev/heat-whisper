@@ -1,6 +1,6 @@
 {
   "name": "HeatWhisper",
-  "version": "0.1.0",
+  "version": "0.0.0-dev",
   "home_assistant_domain": "esphome",
   "new_install_prompt_erase": true,
   "builds": [
