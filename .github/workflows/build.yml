@@ -53,7 +53,9 @@ jobs:
           cp dist/firmware.bin dist/heatwhisper_pico_w.bin
           cp dist/firmware.uf2 dist/heatwhisper_pico_w.uf2
       - uses: softprops/action-gh-release@v2
-        with: { files: dist/** }
+        with:
+          files: dist/**
+          prerelease: ${{ contains(github.ref, '-beta') }}
   pages:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -69,16 +71,17 @@ jobs:
       # Stamp web-flasher manifest version from the git tag (v1.2.3 → 1.2.3)
       # so ESP Web Tools offers updates instead of serving stale 0.1.0.
       - run: |
-          python3 -c "import json,os; tag=os.environ.get('GITHUB_REF','').split('/')[-1].lstrip('v') or 'dev'; m=json.load(open('manifest.json')); m['version']=tag; json.dump(m,open('manifest.json','w'),indent=2)"
+          TAG=${GITHUB_REF##*/}; VERSION=${TAG#v}; DEST=public; case "$TAG" in *-beta*) DEST=public/beta;; esac
+          python3 -c "import json; v='$VERSION'; m=json.load(open('manifest.json')); m['version']=v; json.dump(m,open('manifest.json','w'),indent=2)"
+          echo "TAG=$TAG VERSION=$VERSION DEST=$DEST" >> $GITHUB_ENV
       - run: |
-          mkdir -p public
-          cp index.html manifest.json public/
-          cp fw/firmware.factory.bin public/heatwhisper_esp32.factory.bin
-          cp fw/firmware.ota.bin public/heatwhisper_esp32.ota.bin
-          cp fw/firmware.bin public/heatwhisper_pico_w.bin
-          cp fw/firmware.uf2 public/heatwhisper_pico_w.uf2
-          cp fw/heatwhisper_esp32_s3_rs485.factory.bin public/heatwhisper_esp32_s3_rs485.factory.bin
-          cp fw/heatwhisper_esp32_s3_rs485.ota.bin public/heatwhisper_esp32_s3_rs485.ota.bin
+          mkdir -p "$DEST"
+          cp index.html manifest.json "$DEST"/
+          cp fw/firmware.factory.bin "$DEST"/heatwhisper_esp32.factory.bin
+          cp fw/firmware.ota.bin "$DEST"/heatwhisper_esp32.ota.bin
+          cp fw/firmware.bin "$DEST"/heatwhisper_pico_w.bin
+          cp fw/firmware.uf2 "$DEST"/heatwhisper_pico_w.uf2
+          cp fw/heatwhisper_esp32_s3_rs485.factory.bin fw/heatwhisper_esp32_s3_rs485.ota.bin "$DEST"/
       - uses: actions/upload-pages-artifact@v4
         with: { path: public }
       - id: deployment
