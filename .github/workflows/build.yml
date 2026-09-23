@@ -73,7 +73,9 @@ jobs:
       - run: |
           TAG=${GITHUB_REF##*/}; VERSION=${TAG#v}; DEST=public; case "$TAG" in *-beta*) DEST=public/beta;; esac
           python3 -c "import json; v='$VERSION'; m=json.load(open('manifest.json')); m['version']=v; json.dump(m,open('manifest.json','w'),indent=2)"
-          echo "TAG=$TAG VERSION=$VERSION DEST=$DEST" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DEST=$DEST" >> $GITHUB_ENV
       - run: |
           mkdir -p "$DEST"
           cp index.html manifest.json "$DEST"/
