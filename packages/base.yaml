@@ -27,9 +27,11 @@ logger:
   baud_rate: 115200
 button:
   - platform: restart
-    name: "Restart"
+    name: "Restart HeatWhisper"
+    entity_category: config
   - platform: factory_reset
-    name: "Factory Reset Wi-Fi"
+    name: "Factory Reset HeatWhisper WiFi"
+    entity_category: config
 
 # HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
 heatwhisper:
