@@ -85,7 +85,7 @@ def test_write_queue_capped():
 
 
 def test_rx_resync():
-    assert "len > 64" in CPP and "512" in CPP  # I6
+    assert "len > 128" in CPP and "512" in CPP  # I6: allows Modbus 40 frames (len=80) while rejecting noise
 
 
 def test_ci_artifacts_explicit():

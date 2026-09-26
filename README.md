@@ -55,9 +55,7 @@ Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the
 
 Settings → Devices & Services → ESPHome — the node appears automatically (no API key on factory image). Click Add. The pump model is autodetected from its announcement (`Heat Pump Model` sensor, empty until first heard) — no model setting, no Modbus vs NIBE choice for NIBE pumps.
 
-### 3b. Pump menu 5.2 (one minute, keeps BT50 working)
-
-Service menu (hold `Back` 7s) → `5.2 System settings`: `Modbus OFF`, enable only `RMU S2`, leave `RMU S1 OFF` so BT50 stays the S1 room unit. Factory image is RMU S2 for exactly this reason. Open `http://<node>/heatwhisper/registers` — `Pump is polling S2` means reads/writes are live; `not polled yet` means the 5.2 checkbox is missing. Other slot needed? Switch S1–S4 on that page, save, reboot — no recompile.
+Service menu (hold `Back` 7s) → `5.2 System settings`: enable `Modbus` (required for F-series telemetry & auto-detection). If using RMU room control, enable matching RMU system (e.g. `RMU S2`, leave `RMU S1 OFF` so BT50 stays the S1 room unit). Open `http://<node>/heatwhisper/registers` — `Model: F... (nibe)` confirms communication is live.
 
 ### 4. Pick registers
 

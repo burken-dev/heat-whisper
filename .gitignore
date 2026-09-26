@@ -1,4 +1,5 @@
 reference-project/
+tmp/
 .worktrees/
 secrets.yaml
 .esphome/
