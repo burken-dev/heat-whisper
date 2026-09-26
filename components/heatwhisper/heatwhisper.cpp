@@ -268,7 +268,7 @@ void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
     delayMicroseconds(1200);  // wait ~1.2ms at 9600 baud for shift register stop bit
     flow_pin_->digital_write(false);
   }
-  ESP_LOGI("wire", "TX: %s", hw_hex(d, len).c_str());
+  ESP_LOGD("wire", "TX: %s", hw_hex(d, len).c_str());
 }
 void HeatWhisperComponent::loop() {
   if (!modbus_) {
@@ -304,7 +304,7 @@ void HeatWhisperComponent::loop() {
     }
     if (f.size() != (size_t) f[4] + 6) continue;
     f[f[4] + 5] = nibe::calc_crc_5c(f.data());
-    ESP_LOGI("wire", "RX: %s", hw_hex(f.data(), f.size()).c_str());
+    ESP_LOGD("wire", "RX: %s", hw_hex(f.data(), f.size()).c_str());
     on_frame_(f.data(), f.size());
   }
   return;
@@ -711,7 +711,7 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><label><input type="checkbox" id="psv"> listen-only (passive, no TX)</label> <button id="psvgo">Save</button> <span id="pmsg"></span></p>
 <p>RMU slot: <select id="rmu"><option value="25">S1 (0x19)</option><option value="26">S2 (0x1A)</option><option value="27">S3 (0x1B)</option><option value="28">S4 (0x1C)</option></select> <button id="rmugo">Save</button> <span id="rmumsg"></span><br><span class="k">Pump menu 5.2: Modbus ON for telemetry. Enable matching RMU system if using room controls (keep RMU S1 OFF if BT50 room sensor is fitted).</span></p>
-<p><button id="rst">Reset pump alarm (45171)</button> <span id="rstmsg"></span></p>
+<p><button id="rst">Reset pump alarm (45171, NIBE only)</button> <span id="rstmsg"></span></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
@@ -745,7 +745,7 @@ BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 access
 else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';
 if(j.peer)RM.value=String(j.peer);
 const sn=j.peer?('S'+(j.peer-24)+' (0x'+Number(j.peer).toString(16).toUpperCase()+')'):'RMU';
-RN.textContent=j.peer_seen==1||j.peer_seen=='1'?'Pump is polling '+sn+' — reads/writes live.':'Pump has not polled '+sn+' yet — enable that RMU in 5.2 (keep S1 OFF for BT50), then reboot.';
+RN.textContent=j.peer_seen==1||j.peer_seen=='1'?'Pump is polling '+sn+' — reads/writes live.':'Pump has not polled '+sn+' yet — enable '+sn+' in 5.2'+(String(j.peer)=='25'?'':', keep S1 OFF if a BT50 room sensor is fitted')+', then reboot.';
 render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
