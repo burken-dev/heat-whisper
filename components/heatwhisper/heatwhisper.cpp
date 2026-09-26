@@ -44,6 +44,26 @@ bool HeatWhisperComponent::save_mode(uint8_t mode, const char *model) {
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperMode>(HW_MODE_TYPE, true);
   return pref.save(&m);
 }
+static const uint32_t HW_PASSIVE_TYPE = 0x68777073UL;  // keep: passive override survives OTA
+bool HeatWhisperComponent::load_passive(HeatWhisperPassive *out) {
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
+  if (!pref.load(out) || out->version != 1 || out->passive > 1) return false;
+  return true;
+}
+bool HeatWhisperComponent::save_passive(bool passive) {
+  HeatWhisperPassive m{};
+  m.version = 1;
+  m.passive = passive ? 1 : 0;
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
+  return pref.save(&m);
+}
+// apply_runtime_passive_: NVS override wins over YAML; absent/corrupt NVS
+// keeps the YAML default so first boot is unchanged.
+void HeatWhisperComponent::apply_runtime_passive_() {
+  HeatWhisperPassive m{};
+  if (!load_passive(&m)) return;
+  passive_ = (m.passive != 0);
+}
 // apply_runtime_mode_: flash override wins over codegen; runs before entities
 // so list_json_/create_entities see the effective mode. Nibe (0) clears any
 // stale codegen model so "not heard yet" reads correctly.
@@ -192,6 +212,7 @@ void HeatWhisperComponent::setup() {
     flow_pin_->digital_write(false);
   }
   apply_runtime_mode_();
+  apply_runtime_passive_();
   create_entities();
 }
 void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
