@@ -134,7 +134,7 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all 
 
 ## Troubleshooting
 
-- No values? Check wiring (try swapping A/B), check logs / `web_server` :80, confirm the pump port is enabled.
+- No values? Check wiring (try swapping A/B), check logs / `web_server` :80 (switch Log Level to DEBUG), confirm the pump port is enabled.
 - Writes ignored for addr < 20000: dropped by design, never sent.
 - `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
 - Wi-Fi wrong? Hold out, or press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
