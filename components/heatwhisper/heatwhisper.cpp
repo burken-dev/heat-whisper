@@ -250,6 +250,16 @@ void HeatWhisperComponent::setup() {
     queue_write(45171, 1);  // Reset startup alarm (matches NibePi sendQueue)
   }
 }
+static std::string hw_hex(const uint8_t *d, size_t n) {
+  char buf[8];
+  std::string s;
+  for (size_t i = 0; i < n && i < 24; i++) {
+    snprintf(buf, sizeof(buf), "%02X ", d[i]);
+    s += buf;
+  }
+  if (n > 24) s += "...";
+  return s;
+}
 void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
   if (flow_pin_ != nullptr) flow_pin_->digital_write(true);
   write_array(d, len);
@@ -258,6 +268,7 @@ void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
     delayMicroseconds(1200);  // wait ~1.2ms at 9600 baud for shift register stop bit
     flow_pin_->digital_write(false);
   }
+  ESP_LOGI("wire", "TX: %s", hw_hex(d, len).c_str());
 }
 void HeatWhisperComponent::loop() {
   if (!modbus_) {
@@ -272,12 +283,17 @@ void HeatWhisperComponent::loop() {
     if (rx_.size() < 5) return;
     if (rx_[1] != 0x00) { rx_.erase(rx_.begin()); continue; }
     uint8_t len = rx_[4];
-    if (len > 128) { rx_.erase(rx_.begin()); continue; }
+    if (len > 128) {
+      ESP_LOGW("wire", "DROP LEN>128: %02X", len);
+      rx_.erase(rx_.begin());
+      continue;
+    }
     if (rx_.size() < (size_t) len + 6) return;
     std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
     uint8_t calc = nibe::calc_crc_5c(f.data());
     uint8_t wire_crc = f[len + 5];
     if (calc != wire_crc && !(wire_crc == 0xC5 && calc == 0x5C)) {
+      ESP_LOGW("wire", "CRC FAIL: %s (calc=%02X wire=%02X)", hw_hex(f.data(), f.size()).c_str(), calc, wire_crc);
       rx_.erase(rx_.begin());
       continue;
     }
@@ -288,6 +304,7 @@ void HeatWhisperComponent::loop() {
     }
     if (f.size() != (size_t) f[4] + 6) continue;
     f[f[4] + 5] = nibe::calc_crc_5c(f.data());
+    ESP_LOGI("wire", "RX: %s", hw_hex(f.data(), f.size()).c_str());
     on_frame_(f.data(), f.size());
   }
   return;
@@ -510,7 +527,14 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       auto r = reads_.front(); reads_.pop();
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
-    if (!sent) send_ack_();
+    if (!sent) {
+      if (f[2] == 0x20) {
+        uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
+        tx_(empty_poll, 4);
+      } else {
+        send_ack_();
+      }
+    }
   } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     peer_seen_ = true;
     if (passive_) return;
@@ -522,6 +546,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
     if (f[2] != peer_ && f[2] != 0x20 && (f[2] < 0x19 || f[2] > 0x1C)) return;
+    if (!passive_ && (f[2] == 0x20 || f[2] == peer_)) send_ack_();
     if (f[3] == 0x6D) {
       model_ = nibe::parse_model(f, n);
       if (!model_.empty()) {
@@ -531,8 +556,9 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
         const HwMeta *reg = nullptr;
-        for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-          if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+        auto it = std::lower_bound(HW_META, HW_META + HW_META_N, addr,
+                                   [](const HwMeta &m, uint16_t a) { return m.addr < a; });
+        if (it != HW_META + HW_META_N && it->addr == addr) reg = it;
         if (reg == nullptr) { i += 4; continue; }
         bool wide = (reg->size == HW_U32 || reg->size == HW_S32);
         uint8_t need = wide ? (f[3] == 0x68 ? 8 : 6) : 4;
@@ -564,7 +590,12 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
         on_value(addr, v);  // ponytail: enum maps publish numeric; strings in Task 5
       }
     }
-    if (!passive_ && (f[2] == 0x20 || f[2] == peer_)) send_ack_();
+  } else if (f[3] == 0xEE && (f[2] == peer_ || f[2] == 0x20)) {
+    if (passive_) return;
+    uint8_t r[7];
+    nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
+    tx_(r, 7);
+    return;
   } else if (f[2] == peer_ && peer_ >= 0x19 && peer_ <= 0x1C) {
     // RMU slots (cf. reference-project/backend.js:232-305). TX only for configured peer_; passive decodes silently.
     if (f[3] == 0x60) {
@@ -577,13 +608,6 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       uint8_t r[6];
       nibe::build_rmu63(r);  // == C0 60 02 63 00 C1, matches backend.js:283
       tx_(r, 6);
-      return;
-    }
-    if (f[3] == 0xEE) {
-      if (passive_) return;
-      uint8_t r[7];
-      nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
-      tx_(r, 7);
       return;
     }
     if (!passive_) send_ack_();

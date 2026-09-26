@@ -76,3 +76,23 @@ def test_modbus_0x68_frame_parsing_simulation():
     assert wire_len == 80
     assert wire_len <= 128
 
+
+def test_accessory_version_0xee_replies_for_modbus_and_peer():
+    src = _read(CPP)
+    on_frame = src.split("void HeatWhisperComponent::on_frame_")[1].split("void HeatWhisperComponent::set_poll_registers")[0]
+    assert "f[3] == 0xEE && (f[2] == peer_ || f[2] == 0x20)" in on_frame
+    assert "nibe::build_rmu_version(r)" in on_frame
+    # Checksum of C0 EE 03 EE 03 01 is 0xC1
+    c = 0xC0 ^ 0xEE ^ 0x03 ^ 0xEE ^ 0x03 ^ 0x01
+    assert c == 0xC1
+
+
+def test_modbus_empty_read_replies_c0_69_00_a9():
+    src = _read(CPP)
+    on_frame = src.split("void HeatWhisperComponent::on_frame_")[1].split("void HeatWhisperComponent::set_poll_registers")[0]
+    assert "empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9}" in on_frame
+    # Checksum of C0 69 00 is 0xA9
+    c = 0xC0 ^ 0x69 ^ 0x00
+    assert c == 0xA9
+
+
