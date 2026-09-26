@@ -14,7 +14,7 @@ CONF_PICKER_ID = "picker_id"
 CONF_WEB_SERVER_BASE_ID = web_server_base.CONF_WEB_SERVER_BASE_ID  # attr, not submodule import (see tests/conftest.py stubs)
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HeatWhisper),
-    cv.Optional("slave_address", default=0x19): cv.hex_int,
+    cv.Optional("slave_address", default=0x1A): cv.hex_int,
     cv.Optional("protocol", default="nibe"): cv.one_of("nibe", "modbus_rtu"),
     cv.Optional("model", default=""): cv.string,
     cv.Optional("modbus_address", default=1): cv.int_range(min=1, max=247),

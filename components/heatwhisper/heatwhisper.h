@@ -85,6 +85,13 @@ struct HeatWhisperPassive {
   uint8_t passive{0};
 };
 static_assert(sizeof(HeatWhisperPassive{}) == 8, "HeatWhisperPassive layout");
+// Runtime RMU slot: factory S2 (0x1A) keeps BT50 on S1 intact; picker saves
+// peer to flash, reboot applies it. Valid 0x19-0x1C (RMU S1-S4).
+struct HeatWhisperPeer {
+  uint32_t version{1};
+  uint8_t peer{0x1A};
+};
+static_assert(sizeof(HeatWhisperPeer{}) == 8, "HeatWhisperPeer layout");
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
 // (verified with host g++); NVS save/load use sizeof consistently so the
 // trailing pad bytes are harmless.
@@ -116,6 +123,10 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool save_mode(uint8_t mode, const char *model);
   bool load_passive(HeatWhisperPassive *out);
   bool save_passive(bool passive);
+  bool load_peer(HeatWhisperPeer *out);
+  bool save_peer(uint8_t peer);
+  uint8_t get_peer() const { return peer_; }
+  bool peer_seen() const { return peer_seen_; }
   bool is_passive() const { return passive_; }
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
@@ -129,6 +140,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
   void apply_runtime_mode_();
+  void apply_runtime_peer_();
   void apply_runtime_passive_();
   void on_frame_(const uint8_t *f, uint8_t n);
   void poll_one_();
@@ -138,7 +150,8 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void tx_(const uint8_t *d, size_t len);
   void send_ack_() { uint8_t b = 0x06; tx_(&b, 1); }
   void send_nack_() { uint8_t b = 0x15; tx_(&b, 1); }
-  uint8_t peer_{0x19};  // renamed from slave_: Nibe RMU addr or Modbus peer addr
+  uint8_t peer_{0x1A};  // factory RMU S2: S1 left for BT50/real RMU; Nibe RMU addr or Modbus peer addr
+  bool peer_seen_{false};  // set on first 0x69/0x6B poll to peer_
   bool modbus_{false};
   uint32_t last_poll_{0};
   uint8_t retry_{0};
