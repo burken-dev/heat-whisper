@@ -25,6 +25,13 @@ logger:
   # ponytail: default baud (not 0) — improv_serial needs logger enabled;
   # RS485 lives on a separate UART (16/17 or 17/18), so no conflict.
   baud_rate: 115200
+  level: DEBUG
+  initial_level: INFO
+
+select:
+  - platform: logger
+    name: "Log Level"
+    entity_category: config
 button:
   - platform: restart
     name: "Restart HeatWhisper"

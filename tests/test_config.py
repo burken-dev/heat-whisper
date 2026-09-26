@@ -9,3 +9,12 @@ def test_protocol_keys_present():
 def test_modbus_model_required():
     assert "modbus" in SRC and "model" in SRC
     assert "transports" in SRC
+
+def test_base_yaml_logger_configuration():
+    base = open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
+    assert "level: DEBUG" in base
+    assert "initial_level: INFO" in base
+    assert "platform: logger" in base
+    assert 'name: "Log Level"' in base
+    assert "entity_category: config" in base
+
