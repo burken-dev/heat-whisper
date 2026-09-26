@@ -807,6 +807,8 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   picker_esc_(o, rmodel.c_str());
   o += "\"},\"suggest_modbus\":";
   o += rmodel.empty() ? '1' : '0';
+  o += ",\"passive\":";
+  o += this->parent_->is_passive() ? '1' : '0';
   o += ",\"modbus_models\":[";
   bool mfirst = true;
   for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++) {
@@ -864,6 +866,21 @@ void HeatWhisperPickerHandler::handle_save_(AsyncWebServerRequest *request) {
 void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request) {
   std::string mode = request->hasArg("mode") ? request->arg("mode").c_str() : std::string();
   std::string model = request->hasArg("model") ? request->arg("model").c_str() : std::string();
+  std::string passive = request->hasArg("passive") ? request->arg("passive").c_str() : std::string();
+  if (!passive.empty()) {
+    if (passive != "0" && passive != "1") {
+      request->send(400, "text/plain", "need passive=0|1");
+      return;
+    }
+    if (!this->parent_->save_passive(passive == "1")) {
+      request->send(500, "text/plain", "save failed");
+      return;
+    }
+    if (mode.empty() && model.empty()) {
+      request->send(200, "text/plain", "saved,reboot");
+      return;
+    }
+  }
   if (mode == "nibe") {  // back to autodetect; clears any stale override model
     if (!this->parent_->save_mode(0, "")) {
       request->send(500, "text/plain", "save failed");
