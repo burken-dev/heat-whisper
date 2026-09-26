@@ -80,6 +80,11 @@ struct HeatWhisperMode {
   char model[24]{};
 };
 static_assert(sizeof(HeatWhisperMode{}) == 32, "HeatWhisperMode layout");
+struct HeatWhisperPassive {
+  uint32_t version{1};
+  uint8_t passive{0};
+};
+static_assert(sizeof(HeatWhisperPassive{}) == 8, "HeatWhisperPassive layout");
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
 // (verified with host g++); NVS save/load use sizeof consistently so the
 // trailing pad bytes are harmless.
@@ -109,6 +114,9 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool save_selection(const uint16_t *addrs, uint16_t n);
   bool load_mode(HeatWhisperMode *out);
   bool save_mode(uint8_t mode, const char *model);
+  bool load_passive(HeatWhisperPassive *out);
+  bool save_passive(bool passive);
+  bool is_passive() const { return passive_; }
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
@@ -121,6 +129,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
   void apply_runtime_mode_();
+  void apply_runtime_passive_();
   void on_frame_(const uint8_t *f, uint8_t n);
   void poll_one_();
   void on_modbus_frame_(const uint8_t *f, size_t n);
