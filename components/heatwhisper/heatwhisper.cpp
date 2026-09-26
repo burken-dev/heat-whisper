@@ -57,6 +57,30 @@ bool HeatWhisperComponent::save_passive(bool passive) {
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
   return pref.save(&m);
 }
+static const uint32_t HW_PEER_TYPE = 0x68777072UL;  // keep: runtime RMU slot survives OTA
+bool HeatWhisperComponent::load_peer(HeatWhisperPeer *out) {
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
+  if (!pref.load(out) || out->version != 1 || out->peer < 0x19 || out->peer > 0x1C) return false;
+  return true;
+}
+bool HeatWhisperComponent::save_peer(uint8_t peer) {
+  if (peer < 0x19 || peer > 0x1C) return false;
+  HeatWhisperPeer p{};
+  p.version = 1;
+  p.peer = peer;
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
+  return pref.save(&p);
+}
+// apply_runtime_peer_: NVS override wins over YAML; absent/corrupt NVS
+// keeps the YAML default (factory S2) so first boot preserves BT50.
+// Skipped in modbus mode: peer comes from transports, not the RMU slot.
+void HeatWhisperComponent::apply_runtime_peer_() {
+  if (modbus_) return;
+  HeatWhisperPeer p{};
+  if (!load_peer(&p)) return;
+  if (p.peer < 0x19 || p.peer > 0x1C) return;
+  peer_ = p.peer;
+}
 // apply_runtime_passive_: NVS override wins over YAML; absent/corrupt NVS
 // keeps the YAML default so first boot is unchanged.
 void HeatWhisperComponent::apply_runtime_passive_() {
@@ -212,6 +236,7 @@ void HeatWhisperComponent::setup() {
     flow_pin_->digital_write(false);
   }
   apply_runtime_mode_();
+  apply_runtime_peer_();
   apply_runtime_passive_();
   create_entities();
 }
@@ -462,6 +487,7 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
 }
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
+    peer_seen_ = true;
     if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
@@ -471,6 +497,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     }
     if (!sent) send_ack_();
   } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
+    peer_seen_ = true;
     if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
@@ -639,6 +666,7 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <p><select id="mm"></select> <button id="mgo">Detect &amp; save</button>
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><label><input type="checkbox" id="psv"> listen-only (passive, no TX)</label> <button id="psvgo">Save</button> <span id="pmsg"></span></p>
+<p>RMU slot: <select id="rmu"><option value="25">S1 (0x19)</option><option value="26">S2 (0x1A)</option><option value="27">S3 (0x1B)</option><option value="28">S4 (0x1C)</option></select> <button id="rmugo">Save</button> <span id="rmumsg"></span><br><span class="k">Pump menu 5.2: Modbus OFF, enable only the matching RMU system. Keep RMU S1 OFF if BT50 room sensor is fitted (factory S2 preserves BT50).</span></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
@@ -650,6 +678,7 @@ const MM=document.getElementById('mm'),MG=document.getElementById('mgo'),
 MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
 DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
 const PV=document.getElementById('psv'),PG=document.getElementById('psvgo'),PM=document.getElementById('pmsg');
+const RM=document.getElementById('rmu'),RG=document.getElementById('rmugo'),RN=document.getElementById('rmumsg');
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
 L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
@@ -661,7 +690,11 @@ MM.innerHTML=(j.modbus_models||[]).map(m=>'<option>'+esc(m)+'</option>').join(''
 if(j.runtime&&j.runtime.model)MM.value=j.runtime.model;
 if(j.suggest_modbus){DET.open=true;
 BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 accessory)? Pick the model, Detect & save, then reboot.';}
-else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';render();});
+else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';
+if(j.peer)RM.value=String(j.peer);
+const sn=j.peer?('S'+(j.peer-24)+' (0x'+Number(j.peer).toString(16).toUpperCase()+')'):'RMU';
+RN.textContent=j.peer_seen==1||j.peer_seen=='1'?'Pump is polling '+sn+' — reads/writes live.':'Pump has not polled '+sn+' yet — enable that RMU in 5.2 (keep S1 OFF for BT50), then reboot.';
+render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
@@ -674,6 +707,7 @@ MG.onclick=()=>mpost('mode=modbus&model='+encodeURIComponent(MM.value),
 'Saved. Reboot via ESPHome restart to apply — values should appear within ~30s.');
 MN.onclick=()=>mpost('mode=nibe','Saved. Reboot via ESPHome restart to apply.');
 PG.onclick=()=>{const v=PV.checked?'1':'0';fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'passive='+v}).then(async r=>{PM.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()}).catch(e=>PM.textContent='Save failed: '+e);};
+RG.onclick=()=>{fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'peer='+encodeURIComponent(RM.value)}).then(async r=>{RN.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply, then enable that RMU in 5.2.':'Save failed: '+await r.text()}).catch(e=>RN.textContent='Save failed: '+e);};
 </script></body></html>)HTML";
 bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #ifdef USE_ESP32
@@ -812,6 +846,12 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   o += rmodel.empty() ? '1' : '0';
   o += ",\"passive\":";
   o += this->parent_->is_passive() ? '1' : '0';
+  // Runtime RMU slot (no recompile): effective peer + whether the pump has
+  // polled it yet. peer 0x19-0x1C = RMU S1-S4; factory S2 keeps BT50 on S1.
+  o += ",\"peer\":";
+  { char pb[8]; snprintf(pb, sizeof(pb), "%u", this->parent_->get_peer()); o += pb; }
+  o += ",\"peer_seen\":";
+  o += this->parent_->peer_seen() ? '1' : '0';
   o += ",\"modbus_models\":[";
   bool mfirst = true;
   for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++) {
@@ -870,6 +910,23 @@ void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request)
   std::string mode = request->hasArg("mode") ? request->arg("mode").c_str() : std::string();
   std::string model = request->hasArg("model") ? request->arg("model").c_str() : std::string();
   std::string passive = request->hasArg("passive") ? request->arg("passive").c_str() : std::string();
+  std::string peer = request->hasArg("peer") ? request->arg("peer").c_str() : std::string();
+  if (!peer.empty()) {
+    char *end = nullptr;
+    long v = strtol(peer.c_str(), &end, 0);
+    if (end == peer.c_str() || *end != '\0' || v < 0x19 || v > 0x1C) {
+      request->send(400, "text/plain", "need peer=0x19..0x1C (RMU S1..S4)");
+      return;
+    }
+    if (!this->parent_->save_peer((uint8_t) v)) {
+      request->send(500, "text/plain", "save failed");
+      return;
+    }
+    if (mode.empty() && model.empty() && passive.empty()) {
+      request->send(200, "text/plain", "saved,reboot");
+      return;
+    }
+  }
   if (!passive.empty()) {
     if (passive != "0" && passive != "1") {
       request->send(400, "text/plain", "need passive=0|1");
@@ -879,7 +936,7 @@ void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request)
       request->send(500, "text/plain", "save failed");
       return;
     }
-    if (mode.empty() && model.empty()) {
+    if (mode.empty() && model.empty() && peer.empty()) {
       request->send(200, "text/plain", "saved,reboot");
       return;
     }
