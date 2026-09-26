@@ -32,6 +32,12 @@ button:
   - platform: factory_reset
     name: "Factory Reset HeatWhisper WiFi"
     entity_category: config
+  - platform: template
+    name: "Reset Heat Pump Alarm"
+    icon: "mdi:alarm-check"
+    entity_category: config
+    on_press:
+      - lambda: 'id(heatwhisper_bridge).queue_write(45171, 1);'
 
 # HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
 heatwhisper:
@@ -43,10 +49,10 @@ heatwhisper:
   # 18 entities; stored in flash, survives OTA.
   # First boot: flash once, wire to pump, done. The pump model is autodetected
   # from its announcement — no model setting needed.
-  # Pump menu 5.2 (service menu, hold Back 7s): Modbus OFF, enable only the
-  # RMU slot shown in http://<node>/heatwhisper/registers (factory RMU S2,
-  # keeps BT50 on S1 intact). The page shows "pump is polling Sx" when the
-  # slot is live; RMU S1-S4 switch needs no recompile.
+  # Pump menu 5.2 (service menu, hold Back 7s): Modbus ON for telemetry (F-series
+  # autodetect). If using RMU room control, enable matching RMU slot shown in
+  # http://<node>/heatwhisper/registers (factory RMU S2 keeps BT50 on S1 intact).
+  # RMU S1-S4 switch needs no recompile.
   # Troubleshooting only: passive: true is listen-only bring-up (decode first,
   # TX later). Default is TX enabled.
   # passive: true

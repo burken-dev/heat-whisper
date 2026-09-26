@@ -14,7 +14,7 @@
 <li><b>Flash:</b> plug in via USB, click Install, pick the port. The manifest picks ESP32 vs ESP32-S3 automatically. Use <code>https://&lt;user&gt;.github.io/heat-whisper/</code> or <code>python3 -m http.server</code> locally (WebSerial needs HTTPS or localhost, Chrome/Edge).</li>
 <li><b>Wi-Fi:</b> after flashing, click <b>Configure Wi-Fi</b> in the Install dialog (Improv over USB). Skipped it? Join the fallback AP <code>HeatWhisper</code> (password <code>heatwhisper01</code>) and pick your network in the captive portal.</li>
 <li><b>Connect the pump:</b> wire pump A/B to the onboard screw terminals, power up. The bridge autodetects the NIBE model from its announcement — no model setting, no Modbus vs NIBE choice.</li>
-<li><b>Pump menu 5.2</b> (service menu, hold Back 7s): <code>Modbus OFF</code>, enable only <code>RMU S2</code>, leave <code>RMU S1 OFF</code> so BT50 keeps working. Check <code>http://&lt;node&gt;/heatwhisper/registers</code> for <code>Pump is polling S2</code> (live) vs <code>not polled yet</code> (5.2 checkbox missing).</li>
+<li><b>Pump menu 5.2</b> (service menu, hold Back 7s): <code>Modbus ON</code> (required for F-series telemetry & auto-detection). If using RMU room control, enable matching RMU system (e.g. <code>RMU S2</code>, leave <code>RMU S1 OFF</code> so BT50 keeps working). Check <code>http://&lt;node&gt;/heatwhisper/registers</code> for live model detection.</li>
 <li><b>Home Assistant:</b> Settings → Devices &amp; Services → ESPHome — the node appears automatically (no API key on factory image). Click Add.</li>
 <li><b>Pick registers (optional):</b> open <code>http://&lt;node&gt;/heatwhisper/registers</code>, check what to expose (18 defaults, max 50), save, reboot.</li>
 </ol>

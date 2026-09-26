@@ -10,5 +10,6 @@ uart:
   data_bits: 8
   parity: NONE
   stop_bits: 1
-heatwhisper:
   flow_control_pin: GPIO21
+  rx_buffer_size: 1024
+

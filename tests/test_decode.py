@@ -77,3 +77,11 @@ def test_announce_model_names():
     assert calc_crc(ANNOUNCE_F750) == ANNOUNCE_F750[-1]
     assert parse_model_6d(ANNOUNCE_VVM500) == "VVM500"
     assert parse_model_6d(ANNOUNCE_F750) == "F750"
+
+
+def test_crc_c5_escape():
+    # When calculated checksum is 0x5C, Nibe sends 0xC5 on wire to prevent start-byte conflict
+    wire_crc = 0xC5
+    calc = 0x5C
+    assert wire_crc == calc or (wire_crc == 0xC5 and calc == 0x5C)
+

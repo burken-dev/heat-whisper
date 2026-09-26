@@ -96,7 +96,14 @@ void HeatWhisperComponent::apply_runtime_mode_() {
   if (!load_mode(&m)) return;
   if (m.mode == 0) {
     modbus_ = false;
-    model_.clear();
+    if (m.model[0] != '\0') {
+      for (uint8_t i = 0; i < HW_MODELS_N; i++) {
+        if (strcmp(m.model, HW_MODELS[i].name) == 0) {
+          model_ = m.model;
+          break;
+        }
+      }
+    }
     return;
   }
   if (m.model[0] == '\0') return;
@@ -239,12 +246,29 @@ void HeatWhisperComponent::setup() {
   apply_runtime_peer_();
   apply_runtime_passive_();
   create_entities();
+  if (!modbus_) {
+    queue_write(45171, 1);  // Reset startup alarm (matches NibePi sendQueue)
+  }
+}
+static std::string hw_hex(const uint8_t *d, size_t n) {
+  char buf[8];
+  std::string s;
+  for (size_t i = 0; i < n && i < 24; i++) {
+    snprintf(buf, sizeof(buf), "%02X ", d[i]);
+    s += buf;
+  }
+  if (n > 24) s += "...";
+  return s;
 }
 void HeatWhisperComponent::tx_(const uint8_t *d, size_t len) {
   if (flow_pin_ != nullptr) flow_pin_->digital_write(true);
   write_array(d, len);
   flush();
-  if (flow_pin_ != nullptr) flow_pin_->digital_write(false);
+  if (flow_pin_ != nullptr) {
+    delayMicroseconds(1200);  // wait ~1.2ms at 9600 baud for shift register stop bit
+    flow_pin_->digital_write(false);
+  }
+  ESP_LOGI("wire", "TX: %s", hw_hex(d, len).c_str());
 }
 void HeatWhisperComponent::loop() {
   if (!modbus_) {
@@ -257,12 +281,19 @@ void HeatWhisperComponent::loop() {
     if (it == rx_.end()) { rx_.clear(); return; }
     if (it != rx_.begin()) rx_.erase(rx_.begin(), it);
     if (rx_.size() < 5) return;
+    if (rx_[1] != 0x00) { rx_.erase(rx_.begin()); continue; }
     uint8_t len = rx_[4];
-    if (len > 64) { rx_.erase(rx_.begin()); continue; }
+    if (len > 128) {
+      ESP_LOGW("wire", "DROP LEN>128: %02X", len);
+      rx_.erase(rx_.begin());
+      continue;
+    }
     if (rx_.size() < (size_t) len + 6) return;
     std::vector<uint8_t> f(rx_.begin(), rx_.begin() + len + 6);
-    if (nibe::calc_crc_5c(f.data()) != f[len + 5]) {
-      send_nack_();
+    uint8_t calc = nibe::calc_crc_5c(f.data());
+    uint8_t wire_crc = f[len + 5];
+    if (calc != wire_crc && !(wire_crc == 0xC5 && calc == 0x5C)) {
+      ESP_LOGW("wire", "CRC FAIL: %s (calc=%02X wire=%02X)", hw_hex(f.data(), f.size()).c_str(), calc, wire_crc);
       rx_.erase(rx_.begin());
       continue;
     }
@@ -271,8 +302,9 @@ void HeatWhisperComponent::loop() {
       if (f[i] == 0x5C && f[i + 1] == 0x5C) { f.erase(f.begin() + i); f[4]--; continue; }
       i++;
     }
-    if (f.size() != (size_t) f[4] + 6) { send_nack_(); continue; }
+    if (f.size() != (size_t) f[4] + 6) continue;
     f[f[4] + 5] = nibe::calc_crc_5c(f.data());
+    ESP_LOGI("wire", "RX: %s", hw_hex(f.data(), f.size()).c_str());
     on_frame_(f.data(), f.size());
   }
   return;
@@ -486,8 +518,8 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
   }
 }
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
+  if (f != nullptr && (f[2] == peer_ || f[2] == 0x20)) peer_seen_ = true;
   if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
-    peer_seen_ = true;
     if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
@@ -495,7 +527,14 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       auto r = reads_.front(); reads_.pop();
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
-    if (!sent) send_ack_();
+    if (!sent) {
+      if (f[2] == 0x20) {
+        uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
+        tx_(empty_poll, 4);
+      } else {
+        send_ack_();
+      }
+    }
   } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
     peer_seen_ = true;
     if (passive_) return;
@@ -506,14 +545,20 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
+    if (f[2] != peer_ && f[2] != 0x20 && (f[2] < 0x19 || f[2] > 0x1C)) return;
+    if (!passive_ && (f[2] == 0x20 || f[2] == peer_)) send_ack_();
     if (f[3] == 0x6D) {
       model_ = nibe::parse_model(f, n);
+      if (!model_.empty()) {
+        save_mode(0, model_.c_str());
+      }
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
         const HwMeta *reg = nullptr;
-        for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-          if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+        auto it = std::lower_bound(HW_META, HW_META + HW_META_N, addr,
+                                   [](const HwMeta &m, uint16_t a) { return m.addr < a; });
+        if (it != HW_META + HW_META_N && it->addr == addr) reg = it;
         if (reg == nullptr) { i += 4; continue; }
         bool wide = (reg->size == HW_U32 || reg->size == HW_S32);
         uint8_t need = wide ? (f[3] == 0x68 ? 8 : 6) : 4;
@@ -545,9 +590,14 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
         on_value(addr, v);  // ponytail: enum maps publish numeric; strings in Task 5
       }
     }
-    if (!passive_) send_ack_();
-  } else if (f[2] >= 0x19 && f[2] <= 0x1C) {
-    // RMU slots (cf. reference-project/backend.js:232-305). TX only here; passive decodes silently.
+  } else if (f[3] == 0xEE && (f[2] == peer_ || f[2] == 0x20)) {
+    if (passive_) return;
+    uint8_t r[7];
+    nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
+    tx_(r, 7);
+    return;
+  } else if (f[2] == peer_ && peer_ >= 0x19 && peer_ <= 0x1C) {
+    // RMU slots (cf. reference-project/backend.js:232-305). TX only for configured peer_; passive decodes silently.
     if (f[3] == 0x60) {
       if (passive_) return;
       send_ack_();  // ponytail: no RMU queue in MVP, ACK keeps pump happy
@@ -560,15 +610,8 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       tx_(r, 6);
       return;
     }
-    if (f[3] == 0xEE) {
-      if (passive_) return;
-      uint8_t r[7];
-      nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
-      tx_(r, 7);
-      return;
-    }
     if (!passive_) send_ack_();
-  } else {
+  } else if (f[2] == 0x20 || f[2] == peer_) {
     if (!passive_) send_ack_();
   }
 }
@@ -661,12 +704,14 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>HeatWhisper registers</title>
 <style>body{font-family:sans-serif;max-width:60em;margin:1em auto}li{list-style:none}.k{color:#888;font-size:.8em}</style>
 </head><body><h1>HeatWhisper register picker</h1><p id="note"></p>
+<p>Pump model: <select id="nm"></select> <button id="nmgo">Set model</button> <button id="nmauto">Autodetect</button> <span id="nmmsg"></span></p>
 <div id="mbanner" style="background:#fff8e1;padding:.5em"></div>
 <details id="mdet"><summary>Modbus-RTU setup (advanced)</summary>
 <p><select id="mm"></select> <button id="mgo">Detect &amp; save</button>
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><label><input type="checkbox" id="psv"> listen-only (passive, no TX)</label> <button id="psvgo">Save</button> <span id="pmsg"></span></p>
-<p>RMU slot: <select id="rmu"><option value="25">S1 (0x19)</option><option value="26">S2 (0x1A)</option><option value="27">S3 (0x1B)</option><option value="28">S4 (0x1C)</option></select> <button id="rmugo">Save</button> <span id="rmumsg"></span><br><span class="k">Pump menu 5.2: Modbus OFF, enable only the matching RMU system. Keep RMU S1 OFF if BT50 room sensor is fitted (factory S2 preserves BT50).</span></p>
+<p>RMU slot: <select id="rmu"><option value="25">S1 (0x19)</option><option value="26">S2 (0x1A)</option><option value="27">S3 (0x1B)</option><option value="28">S4 (0x1C)</option></select> <button id="rmugo">Save</button> <span id="rmumsg"></span><br><span class="k">Pump menu 5.2: Modbus ON for telemetry. Enable matching RMU system if using room controls (keep RMU S1 OFF if BT50 room sensor is fitted).</span></p>
+<p><button id="rst">Reset pump alarm (45171)</button> <span id="rstmsg"></span></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
@@ -679,6 +724,9 @@ MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
 DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
 const PV=document.getElementById('psv'),PG=document.getElementById('psvgo'),PM=document.getElementById('pmsg');
 const RM=document.getElementById('rmu'),RG=document.getElementById('rmugo'),RN=document.getElementById('rmumsg');
+const NM=document.getElementById('nm'),NMG=document.getElementById('nmgo'),
+NMA=document.getElementById('nmauto'),NMM=document.getElementById('nmmsg'),
+RST=document.getElementById('rst'),RSTM=document.getElementById('rstmsg');
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
 L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
@@ -686,6 +734,10 @@ L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||Stri
 ' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
 fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
 N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model+' ('+(j.proto||'nibe')+')';
+if(NM){NM.innerHTML=(j.models||[]).map(m=>'<option'+(m.m===(j.model||'F750')?' selected':'')+'>'+esc(m.m)+'</option>').join('');
+NMG.onclick=()=>mpost('mode=nibe&model='+encodeURIComponent(NM.value),'Saved model. Reboot via ESPHome restart to apply.');
+NMA.onclick=()=>mpost('mode=nibe&model=','Reset to autodetect. Reboot via ESPHome restart to apply.');}
+if(RST){RST.onclick=()=>{fetch('/heatwhisper/reset_alarm',{method:'POST',body:''}).then(async r=>{RSTM.textContent=r.ok?'Alarm reset queued.':'Failed: '+await r.text()}).catch(e=>{RSTM.textContent='Failed: '+e;});};}
 MM.innerHTML=(j.modbus_models||[]).map(m=>'<option>'+esc(m)+'</option>').join('');
 if(j.runtime&&j.runtime.model)MM.value=j.runtime.model;
 if(j.suggest_modbus){DET.open=true;
@@ -719,7 +771,8 @@ bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
   auto m = request->method();
   return (m == HTTP_GET && url == ESPHOME_F("/heatwhisper/registers")) ||
          (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/save")) ||
-         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/mode"));
+         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/registers/mode")) ||
+         (m == HTTP_POST && url == ESPHOME_F("/heatwhisper/reset_alarm"));
 }
 void HeatWhisperPickerHandler::handleRequest(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
@@ -729,6 +782,11 @@ void HeatWhisperPickerHandler::handleRequest(AsyncWebServerRequest *request) {
 #else
     const auto &url = request->url();
 #endif
+    if (url == ESPHOME_F("/heatwhisper/reset_alarm")) {
+      this->parent_->queue_write(45171, 1);
+      request->send(200, "text/plain", "alarm reset queued");
+      return;
+    }
     if (url == ESPHOME_F("/heatwhisper/registers/mode")) {
       this->handle_mode_save_(request);
       return;
@@ -941,11 +999,13 @@ void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request)
       return;
     }
   }
-  if (mode == "nibe") {  // back to autodetect; clears any stale override model
-    if (!this->parent_->save_mode(0, "")) {
+  if (mode == "nibe") {
+    const char *m = model.empty() ? "" : model.c_str();
+    if (!this->parent_->save_mode(0, m)) {
       request->send(500, "text/plain", "save failed");
       return;
     }
+    this->parent_->set_model(model);
     request->send(200, "text/plain", "saved,reboot");
     return;
   }
