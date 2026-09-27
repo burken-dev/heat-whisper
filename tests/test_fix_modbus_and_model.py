@@ -80,7 +80,7 @@ def test_modbus_0x68_frame_parsing_simulation():
 def test_accessory_version_0xee_replies_for_modbus_and_peer():
     src = _read(CPP)
     on_frame = src.split("void HeatWhisperComponent::on_frame_")[1].split("void HeatWhisperComponent::set_poll_registers")[0]
-    assert "f[3] == 0xEE" in on_frame and "0x20" in on_frame
+    assert "f[3] == 0xEE" in on_frame and "kModbus40Addr" in on_frame
     assert "peer_" not in on_frame
     assert "nibe::build_rmu_version(r)" in on_frame
     # Checksum of C0 EE 03 EE 03 01 is 0xC1

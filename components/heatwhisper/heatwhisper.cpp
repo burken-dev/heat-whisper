@@ -57,30 +57,6 @@ bool HeatWhisperComponent::save_passive(bool passive) {
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
   return pref.save(&m);
 }
-static const uint32_t HW_PEER_TYPE = 0x68777072UL;  // keep: runtime RMU slot survives OTA
-bool HeatWhisperComponent::load_peer(HeatWhisperPeer *out) {
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
-  if (!pref.load(out) || out->version != 1 || out->peer < 0x19 || out->peer > 0x1C) return false;
-  return true;
-}
-bool HeatWhisperComponent::save_peer(uint8_t peer) {
-  if (peer < 0x19 || peer > 0x1C) return false;
-  HeatWhisperPeer p{};
-  p.version = 1;
-  p.peer = peer;
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
-  return pref.save(&p);
-}
-// apply_runtime_peer_: NVS override wins over YAML; absent/corrupt NVS
-// keeps the YAML default (factory S2) so first boot preserves BT50.
-// Skipped in modbus mode: peer comes from transports, not the RMU slot.
-void HeatWhisperComponent::apply_runtime_peer_() {
-  if (modbus_) return;
-  HeatWhisperPeer p{};
-  if (!load_peer(&p)) return;
-  if (p.peer < 0x19 || p.peer > 0x1C) return;
-  peer_ = p.peer;
-}
 // apply_runtime_passive_: NVS override wins over YAML; absent/corrupt NVS
 // keeps the YAML default so first boot is unchanged.
 void HeatWhisperComponent::apply_runtime_passive_() {
@@ -113,7 +89,7 @@ void HeatWhisperComponent::apply_runtime_mode_() {
       if (HW_TRANSPORTS[t].model_idx == i) {
         modbus_ = true;
         model_ = m.model;
-        peer_ = HW_TRANSPORTS[t].addr;
+        modbus_addr_ = HW_TRANSPORTS[t].addr;
         return;
       }
     }
@@ -187,7 +163,7 @@ void HeatWhisperComponent::create_entities() {
     for (uint8_t k = 0; k < HW_HINTS_N; k++)
       if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
-    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
+    if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     if (kind == 0) {
       auto *sen = new HeatWhisperSensor();
       sen->set_parent(this);
@@ -243,7 +219,6 @@ void HeatWhisperComponent::setup() {
     flow_pin_->digital_write(false);
   }
   apply_runtime_mode_();
-  apply_runtime_peer_();
   apply_runtime_passive_();
   create_entities();
   if (!modbus_) {
@@ -314,7 +289,7 @@ void HeatWhisperComponent::loop() {
   if (mrx_.size() > 256) mrx_.erase(mrx_.begin(), mrx_.begin() + (mrx_.size() - 256));
   for (;;) {
     if (!pending_ || mrx_.empty()) break;
-    if (mrx_[0] != peer_) { mrx_.erase(mrx_.begin()); continue; }
+    if (mrx_[0] != modbus_addr_) { mrx_.erase(mrx_.begin()); continue; }
     if (mrx_.size() >= 5 && mrx_[1] == (uint8_t)(pending_fc_ | 0x80)) {
       if (mrx_.size() < 5) break;
       std::vector<uint8_t> f(mrx_.begin(), mrx_.begin() + 5);
@@ -415,7 +390,7 @@ void HeatWhisperComponent::poll_one_() {
     if (wide) fc = 16;  // FC06 cannot write 2 regs; MODBUS40 (16) never emits FC06
     uint16_t wire = w.addr - 1;
     if (fc == 6 && !wide) {
-      uint8_t o[8] = {peer_, 6, (uint8_t)(wire >> 8), (uint8_t) wire,
+      uint8_t o[8] = {modbus_addr_, 6, (uint8_t)(wire >> 8), (uint8_t) wire,
                       (uint8_t)((w.raw >> 8) & 0xFF), (uint8_t)(w.raw & 0xFF), 0, 0};
       uint16_t c = crc16_modbus(o, 6);
       o[6] = c & 0xFF;
@@ -429,7 +404,7 @@ void HeatWhisperComponent::poll_one_() {
       uint32_t u = (uint32_t) w.raw;
       uint16_t hi = wide ? (uint16_t)(u >> 16) : 0, lo = (uint16_t)(u & 0xFFFF);
       uint8_t cnt = wide ? 2 : 1;
-      uint8_t o[13] = {peer_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
+      uint8_t o[13] = {modbus_addr_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
                        0, 0, 0, 0, 0, 0};
       if (!wide) {
         o[7] = lo >> 8;
@@ -460,7 +435,7 @@ void HeatWhisperComponent::poll_one_() {
   uint8_t fc = (reg != nullptr && reg->fc == 4) ? 4 : 3;  // ponytail: FC01/02 read as FC03 until needed
   uint8_t cnt = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32)) ? 2 : 1;
   uint16_t wire = addr - 1;
-  uint8_t o[8] = {peer_, fc, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, 0, 0};
+  uint8_t o[8] = {modbus_addr_, fc, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, 0, 0};
   uint16_t c = crc16_modbus(o, 6);
   o[6] = c & 0xFF;
   o[7] = c >> 8;
@@ -472,7 +447,7 @@ void HeatWhisperComponent::poll_one_() {
 }
 void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
   if (!pending_ || f == nullptr || n < 5) return;
-  if (f[0] != peer_) return;  // not ours; keep pending for timeout path
+  if (f[0] != modbus_addr_) return;  // not ours; keep pending for timeout path
   auto fail_ = [&]() {
     if (++retry_ >= 3) {
       retry_ = 0;
@@ -518,8 +493,8 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
   }
 }
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
-  if (f != nullptr && (f[2] == peer_ || f[2] == 0x20)) peer_seen_ = true;
-  if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
+  if (f != nullptr && f[2] == kModbus40Addr) modbus40_seen_ = true;
+  if (f[2] == kModbus40Addr && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
@@ -528,15 +503,11 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
     if (!sent) {
-      if (f[2] == 0x20) {
-        uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
-        tx_(empty_poll, 4);
-      } else {
-        send_ack_();
-      }
+      uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
+      tx_(empty_poll, 4);
     }
-  } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
-    peer_seen_ = true;
+  } else if (f[2] == kModbus40Addr && f[3] == 0x6B && f[4] == 0x00) {
+    modbus40_seen_ = true;
     if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
@@ -545,8 +516,8 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
-    if (f[2] != peer_ && f[2] != 0x20 && (f[2] < 0x19 || f[2] > 0x1C)) return;
-    if (!passive_ && (f[2] == 0x20 || f[2] == peer_)) send_ack_();
+    if (f[2] != kModbus40Addr) return;
+    if (!passive_) send_ack_();
     if (f[3] == 0x6D) {
       model_ = nibe::parse_model(f, n);
       if (!model_.empty()) {
@@ -590,28 +561,13 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
         on_value(addr, v);  // ponytail: enum maps publish numeric; strings in Task 5
       }
     }
-  } else if (f[3] == 0xEE && (f[2] == peer_ || f[2] == 0x20)) {
+  } else if (f[3] == 0xEE && f[2] == kModbus40Addr) {
     if (passive_) return;
     uint8_t r[7];
-    nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
+    nibe::build_rmu_version(r);  // MODBUS40 accessory version == C0 EE 03 EE 03 01 C1
     tx_(r, 7);
     return;
-  } else if (f[2] == peer_ && peer_ >= 0x19 && peer_ <= 0x1C) {
-    // RMU slots (cf. reference-project/backend.js:232-305). TX only for configured peer_; passive decodes silently.
-    if (f[3] == 0x60) {
-      if (passive_) return;
-      send_ack_();  // ponytail: no RMU queue in MVP, ACK keeps pump happy
-      return;
-    }
-    if (f[3] == 0x63) {
-      if (passive_) return;
-      uint8_t r[6];
-      nibe::build_rmu63(r);  // == C0 60 02 63 00 C1, matches backend.js:283
-      tx_(r, 6);
-      return;
-    }
-    if (!passive_) send_ack_();
-  } else if (f[2] == 0x20 || f[2] == peer_) {
+  } else if (f[2] == kModbus40Addr) {
     if (!passive_) send_ack_();
   }
 }
@@ -855,7 +811,7 @@ std::string HeatWhisperPickerHandler::list_json_() const {
     for (uint8_t k = 0; k < HW_HINTS_N; k++)
       if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
-    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
+    if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     bool en = false;
     for (uint16_t c = 0; c < cn; c++)
       if (cur[c] == addr) { en = true; break; }
