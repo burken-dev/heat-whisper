@@ -18,9 +18,8 @@ Auto-detected from the pump's announcement frame — no model setting needed. If
 | F exhaust-air | F370, F470, F730, F750 |
 | Indoor modules | VVM225, VVM310, VVM320, VVM325, VVM500 |
 | Control / accessories | SMO40, SHK200S, HMA60, VPK8R, STAR12, TehowattiAir |
-| Room units | RMU40 S1–S4 |
 
-Register maps live in `components/heatwhisper/models/*.json` (32 files: the NIBE models above, plus RMU S1–S4 variants, S-series maps, and native Modbus-RTU maps for Lambda/Thermia/Dimplex/Daikin/Mitsubishi — see Modbus-RTU section).
+Register maps live in `components/heatwhisper/models/*.json` (28 files: the NIBE models above, plus S-series maps, and native Modbus-RTU maps for Lambda/Thermia/Dimplex/Daikin/Mitsubishi — see Modbus-RTU section).
 
 Nibe MODBUS40 (RTU accessory 067 144) covers 16 NIBE models: F1145, F1155, F1245, F1255, F1345, F1355, F370, F470, F730, F750, VVM225, VVM310, VVM320, VVM325, VVM500, SMO40. Five more native Modbus-RTU maps ship in `transports.json` (21 entries total): Lambda_EUL, Thermia_Genesis, Dimplex_WPM, Daikin_Altherma3, Mitsubishi_Ecodan. `model:` in modbus mode must be one of the `transports.json` entries. S-series (S1255, VVMS320, …) is Modbus-TCP only — no bridge needed; their JSON maps are vendored but not usable over this RS485 bridge (the picker lists every catalog file, so ignore the S-series entries).
 
@@ -55,14 +54,14 @@ Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the
 
 Settings → Devices & Services → ESPHome — the node appears automatically (no API key on factory image). Click Add. The pump model is autodetected from its announcement (`Heat Pump Model` sensor, empty until first heard) — no model setting, no Modbus vs NIBE choice for NIBE pumps.
 
-Service menu (hold `Back` 7s) → `5.2 System settings`: enable `Modbus` (required for F-series telemetry & auto-detection). If using RMU room control, enable matching RMU system (e.g. `RMU S2`, leave `RMU S1 OFF` so BT50 stays the S1 room unit). Open `http://<node>/heatwhisper/registers` — `Model: F... (nibe|modbus)` confirms communication is live (`Waiting for pump announcement` = nothing heard yet).
+Service menu (hold `Back` 7s) → `5.2 System settings`: enable `Modbus` (required for F-series telemetry & auto-detection). Leave all RMU systems OFF — the bridge emulates a MODBUS40 accessory (fixed 0x20). Open `http://<node>/heatwhisper/registers` — `Model: F... (nibe|modbus)` confirms communication is live (`Waiting for pump announcement` = nothing heard yet).
 
 ### 4. Pick registers
 
 1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot (via the ESPHome restart button).
 2. The selection is stored in flash and survives OTA. Fewer registers = faster poll cycle, so enable only what you need.
 
-The page also holds the other runtime settings (all saved to flash, reboot to apply): NIBE model pin / Autodetect (pins the catalog filter until the next pump announcement overwrites it), Modbus-RTU setup (see below), listen-only (passive) toggle, RMU slot S1–S4, and a `Reset pump alarm` button (writes 1 to 45171 — NIBE models only).
+The page also holds the other runtime settings (all saved to flash, reboot to apply): NIBE model pin / Autodetect (pins the catalog filter until the next pump announcement overwrites it), Modbus-RTU setup (see below), listen-only (passive) toggle, and a `Reset pump alarm` button (writes 1 to 45171 — NIBE models only).
 
 Done — sensors appear in Home Assistant and writable registers appear as numbers/switches/selects.
 
@@ -98,14 +97,11 @@ heatwhisper:
   id: heatwhisper_bridge
   uart_id: heatwhisper_uart
   # passive: true          # decode-only bring-up (or tick listen-only in the picker — no recompile)
-  # slave_address: 0x1A    # default RMU S2 (S1=0x19, S2=0x1A, S3=0x1B, S4=0x1C); S2 keeps BT50 on S1
-  # No recompile needed: RMU slot is switchable at http://<node>/heatwhisper/registers.
-  # (0x20 is the MODBUS40 accessory address — the bridge auto-answers it, but it is not selectable as slave_address.)
   # flow_control_pin: GPIO18  # heatwhisper-level DE pin for DIY transceivers (S3 package uses UART-level GPIO21 instead)
   # extra_poll: [10001]    # poll-without-entity (sniffing)
 ```
 
-Writes to addresses below 20000 (RMU range) are dropped by design.
+Writes to addresses below 20000 (1xxxx range) are dropped by design.
 
 MQTT (off by default — uncomment block at bottom of `packages/base.yaml`): each entity publishes to its native state topic automatically. Optional `topic_prefix: "heatwhisper"`; HA discovery is automatic, `discovery: false` disables it.
 
