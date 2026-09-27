@@ -169,7 +169,7 @@ void HeatWhisperComponent::create_entities() {
       auto *sen = new HeatWhisperSensor();
       sen->set_parent(this);
       sen->set_register(addr);
-      sen->set_accuracy_decimals(1);  // ponytail: no runtime unit setter in 2026.9.0; units are codegen-pooled
+      sen->set_accuracy_decimals(meta->factor >= 100 ? 2 : meta->factor >= 10 ? 1 : 0);
       // ponytail: mirrors codegen for `delta: 0.1 / throttle: 60s / heartbeat: 5min`
       // (sensor/__init__.py: delta_filter_to_code etc.; USE_SENSOR_FILTER via cg.add_define in __init__.py)
       sen->set_filters({
@@ -593,7 +593,6 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
   reads_.emplace(o, o + 6);
 }
 void HeatWhisperComponent::on_value(uint16_t addr, float v) {
-  v = std::round(v * 10.0f) / 10.0f;
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)
