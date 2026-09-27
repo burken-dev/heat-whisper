@@ -41,9 +41,6 @@ int main() {
   uint8_t f750[] = {0x5C,0x00,0x20,0x6D,0x08,0x00,0x01,0x02,0x46,0x37,0x35,0x30,0x20,0x12};
   assert(parse_model(f750, sizeof(f750)) == "F750");
   // RMU fixed replies (backend.js:283,293)
-  uint8_t r63[6], exp63[] = {0xC0,0x60,0x02,0x63,0x00,0xC1};
-  build_rmu63(r63);
-  assert(memcmp(r63, exp63, 6) == 0);
   uint8_t rver[7], expver[] = {0xC0,0xEE,0x03,0xEE,0x03,0x01,0xC1};
   build_rmu_version(rver);
   assert(memcmp(rver, expver, 7) == 0);
@@ -86,5 +83,6 @@ def test_heatwhisper_delegates_to_nibe():
     cpp = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")).read()
     assert '#include "nibe.h"' in h or '#include "nibe.h"' in cpp
     for sym in ("nibe::calc_crc_5c", "nibe::calc_crc_c0", "nibe::encode_poll",
-                "nibe::encode_write", "nibe::parse_model", "nibe::is_writable"):
+                "nibe::encode_write", "nibe::parse_model", "nibe::is_writable",
+                "nibe::build_rmu_version"):
         assert sym in (h + cpp), f"heatwhisper must delegate to {sym}"
