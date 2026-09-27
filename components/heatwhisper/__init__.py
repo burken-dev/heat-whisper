@@ -14,7 +14,6 @@ CONF_PICKER_ID = "picker_id"
 CONF_WEB_SERVER_BASE_ID = web_server_base.CONF_WEB_SERVER_BASE_ID  # attr, not submodule import (see tests/conftest.py stubs)
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HeatWhisper),
-    cv.Optional("slave_address", default=0x1A): cv.hex_int,
     cv.Optional("protocol", default="nibe"): cv.one_of("nibe", "modbus_rtu"),
     cv.Optional("model", default=""): cv.string,
     cv.Optional("modbus_address", default=1): cv.int_range(min=1, max=247),
@@ -31,7 +30,6 @@ async def to_code(config):
     # sensor platform exists to trigger it — define what sensor codegen would.
     cg.add_define("USE_SENSOR_FILTER")
     await uart.register_uart_device(var, config)
-    cg.add(var.set_slave_address(config["slave_address"]))
     cg.add(var.set_passive(config["passive"]))
     if "flow_control_pin" in config:
         pin = await cg.gpio_pin_expression(config["flow_control_pin"])
@@ -55,7 +53,7 @@ async def to_code(config):
         if not config["model"] or config["model"] not in transports:
             raise cv.Invalid("modbus_rtu protocol requires model: one of " + ", ".join(sorted(transports)))
     cg.add(var.set_protocol_is_modbus(protocol == "modbus_rtu"))
-    cg.add(var.set_peer_address(config["modbus_address"] if protocol == "modbus_rtu" else config["slave_address"]))
+    cg.add(var.set_modbus_address(config["modbus_address"]))
     cg.add(var.set_model(config["model"]))
     catalog_out = os.path.join(os.path.dirname(__file__), "catalog.h")
     with open(catalog_out, "w") as fh:

@@ -25,7 +25,7 @@ def test_save_dedupes_before_cap():
     assert '"too many (max %u)"' in body and "HW_MAX_SELECTION" in body
 
 
-def test_factory_coerces_rmu_to_sensor():
+def test_factory_coerces_sub20k_to_sensor():
     body = CPP.split("void HeatWhisperComponent::create_entities")[1].split("void HeatWhisperComponent::setup")[0]
     assert "addr < 20000 && kind != 0" in body
 

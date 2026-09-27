@@ -57,30 +57,6 @@ bool HeatWhisperComponent::save_passive(bool passive) {
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
   return pref.save(&m);
 }
-static const uint32_t HW_PEER_TYPE = 0x68777072UL;  // keep: runtime RMU slot survives OTA
-bool HeatWhisperComponent::load_peer(HeatWhisperPeer *out) {
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
-  if (!pref.load(out) || out->version != 1 || out->peer < 0x19 || out->peer > 0x1C) return false;
-  return true;
-}
-bool HeatWhisperComponent::save_peer(uint8_t peer) {
-  if (peer < 0x19 || peer > 0x1C) return false;
-  HeatWhisperPeer p{};
-  p.version = 1;
-  p.peer = peer;
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPeer>(HW_PEER_TYPE, true);
-  return pref.save(&p);
-}
-// apply_runtime_peer_: NVS override wins over YAML; absent/corrupt NVS
-// keeps the YAML default (factory S2) so first boot preserves BT50.
-// Skipped in modbus mode: peer comes from transports, not the RMU slot.
-void HeatWhisperComponent::apply_runtime_peer_() {
-  if (modbus_) return;
-  HeatWhisperPeer p{};
-  if (!load_peer(&p)) return;
-  if (p.peer < 0x19 || p.peer > 0x1C) return;
-  peer_ = p.peer;
-}
 // apply_runtime_passive_: NVS override wins over YAML; absent/corrupt NVS
 // keeps the YAML default so first boot is unchanged.
 void HeatWhisperComponent::apply_runtime_passive_() {
@@ -113,7 +89,7 @@ void HeatWhisperComponent::apply_runtime_mode_() {
       if (HW_TRANSPORTS[t].model_idx == i) {
         modbus_ = true;
         model_ = m.model;
-        peer_ = HW_TRANSPORTS[t].addr;
+        modbus_addr_ = HW_TRANSPORTS[t].addr;
         return;
       }
     }
@@ -187,7 +163,7 @@ void HeatWhisperComponent::create_entities() {
     for (uint8_t k = 0; k < HW_HINTS_N; k++)
       if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
-    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
+    if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     if (kind == 0) {
       auto *sen = new HeatWhisperSensor();
       sen->set_parent(this);
@@ -243,7 +219,6 @@ void HeatWhisperComponent::setup() {
     flow_pin_->digital_write(false);
   }
   apply_runtime_mode_();
-  apply_runtime_peer_();
   apply_runtime_passive_();
   create_entities();
   if (!modbus_) {
@@ -314,7 +289,7 @@ void HeatWhisperComponent::loop() {
   if (mrx_.size() > 256) mrx_.erase(mrx_.begin(), mrx_.begin() + (mrx_.size() - 256));
   for (;;) {
     if (!pending_ || mrx_.empty()) break;
-    if (mrx_[0] != peer_) { mrx_.erase(mrx_.begin()); continue; }
+    if (mrx_[0] != modbus_addr_) { mrx_.erase(mrx_.begin()); continue; }
     if (mrx_.size() >= 5 && mrx_[1] == (uint8_t)(pending_fc_ | 0x80)) {
       if (mrx_.size() < 5) break;
       std::vector<uint8_t> f(mrx_.begin(), mrx_.begin() + 5);
@@ -415,7 +390,7 @@ void HeatWhisperComponent::poll_one_() {
     if (wide) fc = 16;  // FC06 cannot write 2 regs; MODBUS40 (16) never emits FC06
     uint16_t wire = w.addr - 1;
     if (fc == 6 && !wide) {
-      uint8_t o[8] = {peer_, 6, (uint8_t)(wire >> 8), (uint8_t) wire,
+      uint8_t o[8] = {modbus_addr_, 6, (uint8_t)(wire >> 8), (uint8_t) wire,
                       (uint8_t)((w.raw >> 8) & 0xFF), (uint8_t)(w.raw & 0xFF), 0, 0};
       uint16_t c = crc16_modbus(o, 6);
       o[6] = c & 0xFF;
@@ -429,7 +404,7 @@ void HeatWhisperComponent::poll_one_() {
       uint32_t u = (uint32_t) w.raw;
       uint16_t hi = wide ? (uint16_t)(u >> 16) : 0, lo = (uint16_t)(u & 0xFFFF);
       uint8_t cnt = wide ? 2 : 1;
-      uint8_t o[13] = {peer_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
+      uint8_t o[13] = {modbus_addr_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
                        0, 0, 0, 0, 0, 0};
       if (!wide) {
         o[7] = lo >> 8;
@@ -460,7 +435,7 @@ void HeatWhisperComponent::poll_one_() {
   uint8_t fc = (reg != nullptr && reg->fc == 4) ? 4 : 3;  // ponytail: FC01/02 read as FC03 until needed
   uint8_t cnt = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32)) ? 2 : 1;
   uint16_t wire = addr - 1;
-  uint8_t o[8] = {peer_, fc, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, 0, 0};
+  uint8_t o[8] = {modbus_addr_, fc, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, 0, 0};
   uint16_t c = crc16_modbus(o, 6);
   o[6] = c & 0xFF;
   o[7] = c >> 8;
@@ -472,7 +447,7 @@ void HeatWhisperComponent::poll_one_() {
 }
 void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
   if (!pending_ || f == nullptr || n < 5) return;
-  if (f[0] != peer_) return;  // not ours; keep pending for timeout path
+  if (f[0] != modbus_addr_) return;  // not ours; keep pending for timeout path
   auto fail_ = [&]() {
     if (++retry_ >= 3) {
       retry_ = 0;
@@ -518,8 +493,8 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
   }
 }
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
-  if (f != nullptr && (f[2] == peer_ || f[2] == 0x20)) peer_seen_ = true;
-  if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x69 && f[4] == 0x00) {
+  if (f != nullptr && f[2] == kModbus40Addr) modbus40_seen_ = true;
+  if (f[2] == kModbus40Addr && f[3] == 0x69 && f[4] == 0x00) {
     if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
@@ -528,15 +503,11 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
     }
     if (!sent) {
-      if (f[2] == 0x20) {
-        uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
-        tx_(empty_poll, 4);
-      } else {
-        send_ack_();
-      }
+      uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
+      tx_(empty_poll, 4);
     }
-  } else if ((f[2] == peer_ || f[2] == 0x20) && f[3] == 0x6B && f[4] == 0x00) {
-    peer_seen_ = true;
+  } else if (f[2] == kModbus40Addr && f[3] == 0x6B && f[4] == 0x00) {
+    modbus40_seen_ = true;
     if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
@@ -545,8 +516,8 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       tx_(o, 10);
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
-    if (f[2] != peer_ && f[2] != 0x20 && (f[2] < 0x19 || f[2] > 0x1C)) return;
-    if (!passive_ && (f[2] == 0x20 || f[2] == peer_)) send_ack_();
+    if (f[2] != kModbus40Addr) return;
+    if (!passive_) send_ack_();
     if (f[3] == 0x6D) {
       model_ = nibe::parse_model(f, n);
       if (!model_.empty()) {
@@ -590,28 +561,13 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
         on_value(addr, v);  // ponytail: enum maps publish numeric; strings in Task 5
       }
     }
-  } else if (f[3] == 0xEE && (f[2] == peer_ || f[2] == 0x20)) {
+  } else if (f[3] == 0xEE && f[2] == kModbus40Addr) {
     if (passive_) return;
     uint8_t r[7];
-    nibe::build_rmu_version(r);  // == C0 EE 03 EE 03 01 C1, matches backend.js:293
+    nibe::build_rmu_version(r);  // MODBUS40 accessory version == C0 EE 03 EE 03 01 C1
     tx_(r, 7);
     return;
-  } else if (f[2] == peer_ && peer_ >= 0x19 && peer_ <= 0x1C) {
-    // RMU slots (cf. reference-project/backend.js:232-305). TX only for configured peer_; passive decodes silently.
-    if (f[3] == 0x60) {
-      if (passive_) return;
-      send_ack_();  // ponytail: no RMU queue in MVP, ACK keeps pump happy
-      return;
-    }
-    if (f[3] == 0x63) {
-      if (passive_) return;
-      uint8_t r[6];
-      nibe::build_rmu63(r);  // == C0 60 02 63 00 C1, matches backend.js:283
-      tx_(r, 6);
-      return;
-    }
-    if (!passive_) send_ack_();
-  } else if (f[2] == 0x20 || f[2] == peer_) {
+  } else if (f[2] == kModbus40Addr) {
     if (!passive_) send_ack_();
   }
 }
@@ -710,7 +666,7 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <p><select id="mm"></select> <button id="mgo">Detect &amp; save</button>
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><label><input type="checkbox" id="psv"> listen-only (passive, no TX)</label> <button id="psvgo">Save</button> <span id="pmsg"></span></p>
-<p>RMU slot: <select id="rmu"><option value="25">S1 (0x19)</option><option value="26">S2 (0x1A)</option><option value="27">S3 (0x1B)</option><option value="28">S4 (0x1C)</option></select> <button id="rmugo">Save</button> <span id="rmumsg"></span><br><span class="k">Pump menu 5.2: Modbus ON for telemetry. Enable matching RMU system if using room controls (keep RMU S1 OFF if BT50 room sensor is fitted).</span></p>
+<p><span class="k">Pump menu 5.2: Modbus ON, all RMU systems OFF — the bridge emulates MODBUS40 (0x20).</span> <span id="rmumsg"></span></p>
 <p><button id="rst">Reset pump alarm (45171, NIBE only)</button> <span id="rstmsg"></span></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
 <span id="count"></span></p><ul id="list"></ul>
@@ -723,7 +679,7 @@ const MM=document.getElementById('mm'),MG=document.getElementById('mgo'),
 MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
 DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
 const PV=document.getElementById('psv'),PG=document.getElementById('psvgo'),PM=document.getElementById('pmsg');
-const RM=document.getElementById('rmu'),RG=document.getElementById('rmugo'),RN=document.getElementById('rmumsg');
+const RN=document.getElementById('rmumsg');
 const NM=document.getElementById('nm'),NMG=document.getElementById('nmgo'),
 NMA=document.getElementById('nmauto'),NMM=document.getElementById('nmmsg'),
 RST=document.getElementById('rst'),RSTM=document.getElementById('rstmsg');
@@ -743,9 +699,7 @@ if(j.runtime&&j.runtime.model)MM.value=j.runtime.model;
 if(j.suggest_modbus){DET.open=true;
 BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 accessory)? Pick the model, Detect & save, then reboot.';}
 else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';
-if(j.peer)RM.value=String(j.peer);
-const sn=j.peer?('S'+(j.peer-24)+' (0x'+Number(j.peer).toString(16).toUpperCase()+')'):'RMU';
-RN.textContent=j.peer_seen==1||j.peer_seen=='1'?'Pump is polling '+sn+' — reads/writes live.':'Pump has not polled '+sn+' yet — enable '+sn+' in 5.2'+(String(j.peer)=='25'?'':', keep S1 OFF if a BT50 room sensor is fitted')+', then reboot.';
+RN.textContent=j.modbus40_seen==1||j.modbus40_seen=='1'?'Pump is polling MODBUS40 (0x20) — reads/writes live.':'Pump has not polled 0x20 yet — enable Modbus in 5.2 (keep RMU OFF), then reboot.';
 render();});
 S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
@@ -759,7 +713,6 @@ MG.onclick=()=>mpost('mode=modbus&model='+encodeURIComponent(MM.value),
 'Saved. Reboot via ESPHome restart to apply — values should appear within ~30s.');
 MN.onclick=()=>mpost('mode=nibe','Saved. Reboot via ESPHome restart to apply.');
 PG.onclick=()=>{const v=PV.checked?'1':'0';fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'passive='+v}).then(async r=>{PM.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()}).catch(e=>PM.textContent='Save failed: '+e);};
-RG.onclick=()=>{fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'peer='+encodeURIComponent(RM.value)}).then(async r=>{RN.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply, then enable that RMU in 5.2.':'Save failed: '+await r.text()}).catch(e=>RN.textContent='Save failed: '+e);};
 </script></body></html>)HTML";
 bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #ifdef USE_ESP32
@@ -855,7 +808,7 @@ std::string HeatWhisperPickerHandler::list_json_() const {
     for (uint8_t k = 0; k < HW_HINTS_N; k++)
       if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
-    if (addr < 20000 && kind != 0) kind = 0;  // RMU range: queue_write drops writes, offer read-only
+    if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     bool en = false;
     for (uint16_t c = 0; c < cn; c++)
       if (cur[c] == addr) { en = true; break; }
@@ -904,12 +857,9 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   o += rmodel.empty() ? '1' : '0';
   o += ",\"passive\":";
   o += this->parent_->is_passive() ? '1' : '0';
-  // Runtime RMU slot (no recompile): effective peer + whether the pump has
-  // polled it yet. peer 0x19-0x1C = RMU S1-S4; factory S2 keeps BT50 on S1.
-  o += ",\"peer\":";
-  { char pb[8]; snprintf(pb, sizeof(pb), "%u", this->parent_->get_peer()); o += pb; }
-  o += ",\"peer_seen\":";
-  o += this->parent_->peer_seen() ? '1' : '0';
+  // MODBUS40 poll status: whether the pump has polled 0x20 yet.
+  o += ",\"modbus40_seen\":";
+  o += this->parent_->modbus40_seen() ? '1' : '0';
   o += ",\"modbus_models\":[";
   bool mfirst = true;
   for (uint8_t t = 0; t < HW_TRANSPORTS_N; t++) {
@@ -968,23 +918,6 @@ void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request)
   std::string mode = request->hasArg("mode") ? request->arg("mode").c_str() : std::string();
   std::string model = request->hasArg("model") ? request->arg("model").c_str() : std::string();
   std::string passive = request->hasArg("passive") ? request->arg("passive").c_str() : std::string();
-  std::string peer = request->hasArg("peer") ? request->arg("peer").c_str() : std::string();
-  if (!peer.empty()) {
-    char *end = nullptr;
-    long v = strtol(peer.c_str(), &end, 0);
-    if (end == peer.c_str() || *end != '\0' || v < 0x19 || v > 0x1C) {
-      request->send(400, "text/plain", "need peer=0x19..0x1C (RMU S1..S4)");
-      return;
-    }
-    if (!this->parent_->save_peer((uint8_t) v)) {
-      request->send(500, "text/plain", "save failed");
-      return;
-    }
-    if (mode.empty() && model.empty() && passive.empty()) {
-      request->send(200, "text/plain", "saved,reboot");
-      return;
-    }
-  }
   if (!passive.empty()) {
     if (passive != "0" && passive != "1") {
       request->send(400, "text/plain", "need passive=0|1");
@@ -994,7 +927,7 @@ void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request)
       request->send(500, "text/plain", "save failed");
       return;
     }
-    if (mode.empty() && model.empty() && peer.empty()) {
+    if (mode.empty() && model.empty()) {
       request->send(200, "text/plain", "saved,reboot");
       return;
     }
