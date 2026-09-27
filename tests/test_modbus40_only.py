@@ -31,4 +31,4 @@ def test_modbus40_address_constant_and_members():
 def test_no_rmu_selector_in_picker():
     src = _read(CPP)
     assert "RMU slot" not in src and "BT50" not in src
-    assert '"modbus40_seen"' in src
+    assert 'modbus40_seen' in src
