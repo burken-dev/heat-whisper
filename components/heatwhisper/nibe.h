@@ -21,7 +21,7 @@ inline uint8_t calc_crc_c0(const uint8_t *d) {
   for (int i = 0; i < d[2] + 3; i++) c ^= d[i];
   return c;
 }
-// RMU 1xxxx range is read-only on the wire; writes are dropped.
+// 1xxxx range is read-only on the wire; writes are dropped.
 inline bool is_writable(uint16_t addr) { return addr >= 20000; }
 // C0 69 02 lo hi CRC — answer to a 0x69 read-poll slot.
 inline void encode_poll(uint16_t addr, uint8_t out[6]) {
@@ -66,15 +66,7 @@ inline std::string parse_model(const uint8_t *f, size_t n) {
   }
   return model;
 }
-// RMU fixed replies (cf. reference-project/backend.js:283,293).
-inline void build_rmu63(uint8_t out[6]) {
-  out[0] = 0xC0;
-  out[1] = 0x60;
-  out[2] = 0x02;
-  out[3] = 0x63;
-  out[4] = 0x00;
-  out[5] = calc_crc_c0(out);  // == 0xC1
-}
+// MODBUS40 accessory version reply (bytes cf. reference-project/backend.js:293).
 inline void build_rmu_version(uint8_t out[7]) {
   out[0] = 0xC0;
   out[1] = 0xEE;
