@@ -10,6 +10,38 @@ def _num(x):
         return 0
 
 
+def canon_unit(u):
+    # ponytail: single normalization for catalog units (mojibake + ºC typo),
+    # shared by the title table and the HA string-pool mapping.
+    return ((u or "").replace("�", "°").replace("º", "°").strip())
+
+
+# ponytail: unit -> HA device_class; only unambiguous exact matches, else ""
+# (unit-only, no wrong HA unit conversion). Bare "%" stays classless.
+DEVICE_CLASS_FOR_UNIT = {
+    "°C": "temperature", "K": "temperature",
+    "%RH": "humidity",
+    "V": "voltage", "A": "current",
+    "W": "power", "kW": "power",
+    "Wh": "energy", "kWh": "energy",
+    "Hz": "frequency",
+    "bar": "pressure", "kPa": "pressure", "Pa": "pressure",
+    "s": "duration", "min": "duration", "h": "duration",
+}
+
+
+def device_class_for_unit(u):
+    return DEVICE_CLASS_FOR_UNIT.get(canon_unit(u), "")
+
+
+def state_class_for_unit(u):
+    # ponytail: ESPHome enum ints (1=measurement, 2=total_increasing); 0 = none.
+    u = canon_unit(u)
+    if u in ("Wh", "kWh"):
+        return 2
+    return 1 if u in DEVICE_CLASS_FOR_UNIT else 0
+
+
 def _has_range(r):
     return _num(r.get("min", 0)) != 0 or _num(r.get("max", 0)) != 0
 
@@ -106,17 +138,20 @@ def validate_selection(addrs, models):
 def _esc(s):
     return (s or "").replace("\\", "\\\\").replace('"', '\\"')
 
-def generate_catalog_header(models, hints, transports=None):
+def generate_catalog_header(models, hints, transports=None, str_idx=None):
+    # str_idx: codegen-time string-pool indices {"uom": {unit: idx}, "dc": {dc: idx}}
+    # (1-based, 0 = unset); None keeps every row zero = today's behavior.
     by_reg = _by_reg(models)
     addrs = sorted({int(r["register"]) for regs in models.values() for r in regs})
     titles = {}
     for regs in models.values():
         for r in regs:
             titles.setdefault(r["register"], (r.get("titel") or f"Register {r['register']}",
-                                              (r.get("unit") or "").replace("�", "°")))
+                                              canon_unit(r.get("unit"))))
     lines = ["#pragma once", '#include <stdint.h>',
              "struct HwMeta { uint16_t addr; int16_t factor; uint8_t size; uint8_t rw; int32_t min; int32_t max; uint8_t fc; uint8_t wo; };",
              "struct HwTitle { uint16_t addr; const char *title; const char *unit; };",
+             "struct HwStr { uint16_t addr; uint8_t dc; uint8_t uom; uint8_t sc; };",
              "struct HwModel { const char *name; const uint16_t *addrs; uint16_t n; };",
              "struct HwHint { uint16_t addr; uint8_t kind; const char *opts; };",
              "struct HwTransport { uint8_t model_idx; uint32_t baud; uint8_t parity; uint8_t addr; uint8_t write_fc; };"]
@@ -130,6 +165,17 @@ def generate_catalog_header(models, hints, transports=None):
     lines.append(f"static const uint16_t HW_META_N = {len(addrs)};")
     trows = ",".join(f'{{{a},"{_esc(titles[str(a)][0])}","{_esc(titles[str(a)][1])}"}}' for a in addrs)
     lines.append(f"static const HwTitle HW_TITLES[] = {{{trows}}};")
+    def _str_row(a):
+        if not str_idx:
+            return f"{{{a},0,0,0}}"
+        unit = titles[str(a)][1]
+        uom = (str_idx.get("uom", {}).get(unit, 0)) if unit else 0
+        dc = str_idx.get("dc", {}).get(device_class_for_unit(unit), 0)
+        sc = state_class_for_unit(unit) if unit else 0
+        return f"{{{a},{dc},{uom},{sc}}}"
+    srows = ",".join(_str_row(a) for a in addrs)
+    lines.append(f"static const HwStr HW_STRS[] = {{{srows}}};")
+    lines.append(f"static const uint16_t HW_STRS_N = {len(addrs)};")
     for m, regs in sorted(models.items()):
         want = normalize_model(m)
         lst = sorted({int(r["register"]) for r in regs})

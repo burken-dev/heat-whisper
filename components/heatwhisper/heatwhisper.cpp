@@ -113,6 +113,13 @@ static const char *base_name_for(uint16_t addr) {
     if (HW_FACTORY_NAMES[i].addr == addr) return HW_FACTORY_NAMES[i].name;
   return nullptr;
 }
+// Codegen-baked entity string indices (dc | uom<<8 packs into App.register_*
+// entity_fields); all zeros = unitless, identical to the old behavior.
+static const HwStr *hw_str_for(uint16_t addr) {
+  for (uint16_t k = 0; k < HW_STRS_N; k++)  // ponytail: linear scan, same as decode loop
+    if (HW_STRS[k].addr == addr) return &HW_STRS[k];
+  return nullptr;
+}
 // Parse hint opts "raw:label;raw:label" (labels carry \" and \\ escapes from _esc).
 static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector<std::string> *labels) {
   for (const char *p = opts; *p;) {
@@ -170,6 +177,12 @@ void HeatWhisperComponent::create_entities() {
       sen->set_parent(this);
       sen->set_register(addr);
       sen->set_accuracy_decimals(meta->factor >= 100 ? 2 : meta->factor >= 10 ? 1 : 0);
+      const HwStr *str = hw_str_for(addr);
+      uint32_t fields = 0;
+      if (str != nullptr) {
+        fields = (uint32_t) str->dc | ((uint32_t) str->uom << 8);
+        if (str->sc) sen->set_state_class((esphome::sensor::StateClass) str->sc);
+      }
       // ponytail: mirrors codegen for `delta: 0.1 / throttle: 60s / heartbeat: 5min`
       // (sensor/__init__.py: delta_filter_to_code etc.; USE_SENSOR_FILTER via cg.add_define in __init__.py)
       sen->set_filters({
@@ -177,7 +190,7 @@ void HeatWhisperComponent::create_entities() {
         new esphome::sensor::ThrottleFilter(60000),
         new esphome::sensor::HeartbeatFilter(300000),
       });
-      App.register_sensor(sen, title, hash, 0);
+      App.register_sensor(sen, title, hash, fields);
       add_sensor(sen);
     } else if (kind == 1) {
       float f = meta->factor ? (float) meta->factor : 1.0f;
@@ -187,7 +200,9 @@ void HeatWhisperComponent::create_entities() {
       num->traits.set_min_value((float) meta->min / f);
       num->traits.set_max_value((float) meta->max / f);
       num->traits.set_step(1.0f / f);  // one raw LSB; no step info in catalog
-      App.register_number(num, title, hash, 0);
+      const HwStr *nstr = hw_str_for(addr);
+      uint32_t nfields = nstr ? ((uint32_t) nstr->dc | ((uint32_t) nstr->uom << 8)) : 0;
+      App.register_number(num, title, hash, nfields);
       add_number(num);
     } else if (kind == 2) {
       auto *sw = new HeatWhisperSwitch();
