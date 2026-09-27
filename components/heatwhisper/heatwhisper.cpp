@@ -593,6 +593,7 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
   reads_.emplace(o, o + 6);
 }
 void HeatWhisperComponent::on_value(uint16_t addr, float v) {
+  v = std::round(v * 10.0f) / 10.0f;
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_value(v);
   for (auto *n : numbers_)
