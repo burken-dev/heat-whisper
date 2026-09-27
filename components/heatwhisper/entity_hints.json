@@ -2,5 +2,6 @@
   "47041": {"type": "select", "options": [[0, "Eco"], [1, "Normal"], [2, "Luxury"], [4, "Smart"]]},
   "47371": {"type": "switch"},
   "47370": {"type": "switch"},
-  "47387": {"type": "switch"}
+  "47387": {"type": "switch"},
+  "48132": {"type": "select", "options": [[0, "Off"], [1, "3h"], [2, "6h"], [3, "12h"], [4, "One time"]]}
 }

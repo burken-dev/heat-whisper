@@ -44,7 +44,7 @@ def test_init_uses_extra_poll():
 
 
 def test_smart_allowlist_present():
-    for a in [40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043]:
+    for a in [40033, 43144, 43305, 45001, 47011, 47041, 47371, 47370, 47387, 48132, 47043]:
         assert a in DEFAULT_ALLOWLIST
 
 
@@ -58,5 +58,5 @@ def test_smart_catalog_decodable_real_models():
             with open(os.path.join(mdir, f)) as fh:
                 models[f[:-5]] = json.load(fh)
     hdr = generate_catalog_header(models, {})
-    for a in ["40033", "43144", "43305", "47007", "47011", "47041", "47370", "47371", "47387", "47043"]:
+    for a in ["40033", "43144", "43305", "45001", "47011", "47041", "47370", "47371", "47387", "48132", "47043"]:
         assert "{" + a + "," in hdr

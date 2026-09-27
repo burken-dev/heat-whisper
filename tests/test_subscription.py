@@ -25,7 +25,7 @@ def test_number_control_still_queues_when_disabled():
     assert "queue_write" in body
     assert "disabled_" not in body and "is_enabled" not in body
 OLD_ENTITY_REGS = (40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
-                 40033, 43144, 43305, 47011, 47007, 47041, 47371, 47370, 47387, 47043)
+                 40033, 43144, 43305, 45001, 47011, 47041, 47371, 47370, 47387, 48132, 47043)
 
 def _base_text():
     return open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
@@ -56,11 +56,12 @@ def test_factory_covers_old_entity_set():
     assert sorted(table) == sorted(OLD_ENTITY_REGS)
     assert sorted(table) == sorted(DEFAULT_ENABLED)
     assert len(set(table.values())) == len(table)
-    # ponytail: hardcoded snapshot of the 18 factory names; catches silent renames.
+    # ponytail: hardcoded snapshot of the 19 factory names; catches silent renames.
     EXPECTED_BASE_NAMES = ["BT1 Outdoor", "Supply Temp S1", "Return Temp",
         "Hot Water Top BT7", "Hot Water BT6", "Calculated Supply",
         "Compressor Frequency", "Room Temp S1", "Compressor Energy Total",
         "Compressor Energy HW", "Degree Minutes", "Heat Offset S1",
-        "Heat Curve S1", "Hot Water Comfort Mode", "Allow Heating",
-        "Allow Additive Heating", "Hot Water Production", "Hot Water Luxury Start Temp"]
+        "Alarm", "Hot Water Comfort Mode", "Allow Heating",
+        "Allow Additive Heating", "Hot Water Production", "Temporary Lux",
+        "Hot Water Luxury Start Temp"]
     assert sorted(table.values()) == sorted(EXPECTED_BASE_NAMES)
