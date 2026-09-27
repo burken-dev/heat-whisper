@@ -700,7 +700,8 @@ const NM=document.getElementById('nm'),NMG=document.getElementById('nmgo'),
 NMA=document.getElementById('nmauto'),NMM=document.getElementById('nmmsg'),
 RST=document.getElementById('rst'),RSTM=document.getElementById('rstmsg');
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-function render(){const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
+function sync(){for(const c of L.querySelectorAll('input')){const r=regs.find(x=>String(x.a)===c.dataset.a);if(r)r.en=c.checked;}}
+function render(){sync();const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
 L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
 .map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+
 ' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
@@ -717,7 +718,7 @@ BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 access
 else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';
 RN.textContent=j.modbus40_seen==1||j.modbus40_seen=='1'?'Pump is polling MODBUS40 (0x20) — reads/writes live.':'Pump has not polled 0x20 yet — enable Modbus in 5.2 (keep RMU OFF), then reboot.';
 render();});
-S.onclick=()=>{const a=[...L.querySelectorAll('input:checked')].map(c=>c.dataset.a).join(',');
+S.onclick=()=>{sync();const a=regs.filter(r=>r.en).map(r=>r.a).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
 M.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()})
