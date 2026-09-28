@@ -27,7 +27,7 @@ def resolve_fw_version():
     if not out:
         return "dev"
     # ponytail: tag-safe by construction; allow-list so the -D quote can't break.
-    safe = "".join(c for c in out if c.isalnum() or c in "._-+")
+    safe = "".join(c for c in out if (c.isascii() and c.isalnum()) or c in "._-+")
     return safe or "dev"
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HeatWhisper),

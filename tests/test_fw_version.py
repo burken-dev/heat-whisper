@@ -47,6 +47,15 @@ def test_resolve_fw_version_empty_output_is_dev(monkeypatch):
     assert resolve_fw_version() == "dev"
 
 
+def test_resolve_fw_version_all_unsafe_is_dev(monkeypatch):
+    from components.heatwhisper import subprocess as hw_subprocess
+    class R:
+        stdout = '";"'
+    monkeypatch.setattr(hw_subprocess, "run", lambda *a, **k: R())
+    from components.heatwhisper import resolve_fw_version
+    assert resolve_fw_version() == "dev"
+
+
 def test_codegen_bakes_fw_define():
     src = open(os.path.join(REPO, "components", "heatwhisper", "__init__.py")).read()
     assert '"git", "describe"' in src  # ponytail: argv-list form, no shell (brief said "git describe"; list form never contains that substring)
