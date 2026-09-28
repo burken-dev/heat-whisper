@@ -1,6 +1,9 @@
-# Firmware build number on picker page — design
+# Firmware build number as text_sensor — design
 
-Date: 2026-09-28. Approach A (approved): codegen-baked `git describe`, picker page only.
+Date: 2026-09-28. Approved: codegen-baked `git describe` published via a
+template text_sensor named "HeatWhisper version". (Rev 2: supersedes the
+picker-page `"fw"` approach — the sensor auto-appears on `http://<node>/`
+via `web_server`'s entity list plus HA, so no custom HTML/JSON is needed.)
 
 ## Problem
 
@@ -13,23 +16,26 @@ needs the git tag visible on the node itself.
 
 - Source: git tag at compile time (`git describe --tags --dirty --always`).
   No hand-maintained version string; tag stays the single source of truth.
-- Surface: `/heatwhisper/registers` page only (header line + `"fw"` JSON
-  field). `/` is owned by ESPHome's `web_server` — injecting there is fragile.
-  No HA sensor (revisit if needed; picker covers the debugging need).
+- Surface: one template `text_sensor` ("HeatWhisper version", diagnostic)
+  publishing the baked string. Visible on `/` (entity list), in HA, and in
+  logs. Picker page untouched.
+- ESPHome's stock `platform: version` sensor deliberately NOT used: it
+  reports the ESPHome framework version (e.g. `2026.9.0`), identical across
+  HeatWhisper releases built with the same toolchain — answers the wrong
+  question.
 
 ## Architecture
 
-`components/heatwhisper/__init__.py`, `heatwhisper.{h,cpp}`, `build.yml` only.
-No YAML schema change.
+`components/heatwhisper/__init__.py` + `packages/base.yaml` + `build.yml`
+only. No C++ entity code, no picker changes.
 
 - Codegen (`to_code`): subprocess `git describe --tags --dirty --always`,
   fallback `"dev"` (git missing / not-a-repo / describe fails). Bakes
   `-DHW_FW_VERSION="<ver>"` via `cg.add_define`. ~5 lines.
-- C++: `HW_FW_VERSION` defaults to `"dev"` when the define is absent (host
-  tests, stale builds). `list_json_()` gains `"fw":"<ver>"` (escaped like
-  model strings).
-- HTML: header line `Firmware: <ver>` rendered from `j.fw` on the existing
-  `?format=json` fetch. No new endpoint, no new request.
+- YAML (`base.yaml`, next to "Heat Pump Model"): template text_sensor with
+  `lambda: 'return HW_FW_VERSION;'`, `entity_category: diagnostic`. Define
+  defaults to `"dev"` when absent (host tests, stale builds) so the lambda
+  always compiles.
 - CI: `actions/checkout` gains `fetch-depth: 0` on the compile job so tags
   reach `git describe`. Shallow/local builds degrade to `dev-g<sha>` or
   `dev` — never empty, never blocking.
@@ -37,8 +43,9 @@ No YAML schema change.
 ## Data flow
 
 1. Compile: codegen resolves tag → define → baked string.
-2. Page `GET ?format=json` → `{..., fw: "v0.2.0-beta.13-4-g1bc7a0c"}`.
-3. Page renders `Firmware: ...` in the header.
+2. Boot: template sensor publishes `HW_FW_VERSION` once (static string).
+3. `http://<node>/` lists "HeatWhisper version"; HA gets the entity via
+   the native API automatically.
 
 ## Error handling
 
@@ -46,19 +53,21 @@ No YAML schema change.
   a clean release.
 - No tags reachable → `--always` yields short SHA; shown as-is (still
   identifies the build). Git absent → `"dev"`.
-- JSON escaping reuses `picker_esc_`; version chars are tag-safe by construction.
+- Version chars are tag-safe by construction; define is quoted at the
+  codegen boundary.
 
 ## Testing
 
-- `python -m pytest tests/ -q` (existing suite; add assertion that picker
-  JSON contains `"fw"`).
-- `esphome config` on all three boards (validates codegen define path).
-- Manual: flash, open `/heatwhisper/registers`, confirm header matches
-  `git describe --tags --dirty --always`.
+- `python -m pytest tests/ -q` (existing suite).
+- `esphome config` on all three boards (validates codegen define + YAML
+  lambda path).
+- Manual: flash, open `http://<node>/`, confirm "HeatWhisper version"
+  matches `git describe --tags --dirty --always`.
 
 ## Skipped
 
+- Picker-page `"fw"` field + HTML header (rev 1): redundant once the sensor
+  exists — `/` already lists it.
+- Stock `platform: version`: reports toolchain, not HeatWhisper release.
 - Manual `version.txt`: drifts, adds a release step.
-- Reading ESPHome `project.version`: answers the wrong question (stale).
-- Injecting into `/`: fragile, owned by upstream `web_server`.
-- HA `text_sensor`: not needed for the debugging use case; say so if wanted.
+- Reading ESPHome `project.version`: stale hardcoded `"1.0"`.
