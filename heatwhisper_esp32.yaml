@@ -1,3 +1,5 @@
+substitutions:
+  ota_manifest_url: https://burken-dev.github.io/heat-whisper/manifest.json
 esphome:
   name: heat-whisper
   friendly_name: HeatWhisper
@@ -6,6 +8,7 @@ dashboard_import:
 packages:
   base: !include packages/base.yaml
   hw: !include packages/esp32_base.yaml
+  ota_update: !include packages/ota_update.yaml
 external_components:
   - source:
       type: local

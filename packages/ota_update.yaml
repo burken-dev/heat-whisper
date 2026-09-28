@@ -1,0 +1,10 @@
+# Managed OTA only on ESP32 family (Pico W stays manual UF2 — RP2040 has no
+# ESP-Web-Tools chipFamily and no HTTPS cert verification).
+http_request:
+ota:
+  - platform: http_request
+update:
+  - platform: http_request
+    name: "Firmware Update"
+    source: ${ota_manifest_url}
+    update_interval: 24h
