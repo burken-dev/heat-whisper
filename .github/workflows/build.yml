@@ -14,6 +14,7 @@ jobs:
     needs: host-tests
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }  # tags must reach git describe for HW_FW_VERSION
       # ponytail: factory image is zero-config (no secrets); keep a dummy file
       # only so local `!secret` experiments don't fail on missing file.
       - run: cp secrets.yaml.example secrets.yaml || true

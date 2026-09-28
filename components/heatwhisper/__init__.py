@@ -1,5 +1,5 @@
 # components/heatwhisper/__init__.py
-import os, json, esphome.codegen as cg
+import os, json, subprocess, esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components import uart, web_server_base
@@ -13,6 +13,22 @@ HeatWhisperPickerHandler = heatwhisper_ns.class_("HeatWhisperPickerHandler", cg.
 CONF_EXTRA_POLL = "extra_poll"
 CONF_PICKER_ID = "picker_id"
 CONF_WEB_SERVER_BASE_ID = web_server_base.CONF_WEB_SERVER_BASE_ID  # attr, not submodule import (see tests/conftest.py stubs)
+def resolve_fw_version():
+    # ponytail: git tag is the single source of truth; never hand-bump.
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--tags", "--dirty", "--always"],
+            capture_output=True, text=True, timeout=10,
+            cwd=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."),
+            check=True,
+        ).stdout.strip()
+    except Exception:
+        return "dev"
+    if not out:
+        return "dev"
+    # ponytail: tag-safe by construction; allow-list so the -D quote can't break.
+    safe = "".join(c for c in out if (c.isascii() and c.isalnum()) or c in "._-+")
+    return safe or "dev"
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(HeatWhisper),
     cv.Optional("protocol", default="nibe"): cv.one_of("nibe", "modbus_rtu"),
@@ -32,6 +48,7 @@ async def to_code(config):
     cg.add_define("USE_SENSOR_FILTER")
     await uart.register_uart_device(var, config)
     cg.add(var.set_passive(config["passive"]))
+    cg.add_define("HW_FW_VERSION", f'"{resolve_fw_version()}"')
     if "flow_control_pin" in config:
         pin = await cg.gpio_pin_expression(config["flow_control_pin"])
         cg.add(var.set_flow_control_pin(pin))
