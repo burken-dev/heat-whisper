@@ -14,6 +14,10 @@
 #include <queue>
 #include <string>
 #include <vector>
+// Firmware identity baked by codegen (git describe); "dev" when unknown.
+#ifndef HW_FW_VERSION
+#define HW_FW_VERSION "dev"
+#endif
 // ponytail: must match SIZE_CODES in registers.py
 namespace esphome {
 namespace heatwhisper {
