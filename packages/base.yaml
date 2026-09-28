@@ -81,6 +81,12 @@ text_sensor:
     lambda: 'return id(heatwhisper_bridge).get_model();'
     update_interval: 60s
     entity_category: diagnostic
+  # Firmware build identity (git tag baked at compile time, "dev" when unknown).
+  - platform: template
+    name: "HeatWhisper version"
+    lambda: 'return HW_FW_VERSION;'
+    update_interval: 60s
+    entity_category: diagnostic
 
 # MQTT opt-in (OFF by default). Add a broker block and each entity
 # publishes to its single native state topic (<node>/sensor/<name>/state)
