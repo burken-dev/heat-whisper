@@ -1,14 +1,36 @@
 # HeatWhisper
 
-ESPHome bridge between a NIBE heat pump (RS485) and Home Assistant. It acts as a room-unit slave: answers pump polls, decodes registers, and sends writes back in poll slots. No control logic on-device — telemetry and writes only.
+Heat Whisper is a software that lets you read and control your heat pump locally. The main focus is to integrate Nibe heatpumps from the F-series to Home Assistant. It is possible to configure Heat Whisper to communicate over MQTT to support other systems apart from Home Assistant.
 
-Native HA API is primary. MQTT is opt-in only.
+This project doens't include any logic for smart control itself, the purpose is instead to expose any supported register to be read or written to by the smart home system of your choice. If you are running e.g. Home Assistant you can set up your control logic based on electricity prices, weather forcast, solar production and whatever you like.
+
+The project is based on ESPHome and emulates Nibe's own Modbus 40-unit by communicating with the heat pump over RS485.
+
+You can support the project by:
+* Joining as a developer
+* Using one of the affiliate-links to purchase a compatible board
+* Using my Tibber link: https://invite.tibber.com/bdh8hhil if you're thinking about switching to them
+
+# Supported boards
 
 Boards: ESP32 (`heatwhisper_esp32.yaml`), ESP32-S3 RS485-CAN (`heatwhisper_esp32_s3_rs485.yaml`), and Raspberry Pi Pico W (`heatwhisper_pico_w.yaml`).
 
+Recommended board is the Waveshare ESP32-S3 with RS485/CAN, it requires no soldering and is as close to plug n' play as you can get.
+
+You can support the project by using an affiliate link:
+https://link.amazon/B06WtBCo5 (without external antenna)
+https://link.amazon/B09Kg52Ee (with external antenna)
+
+*As an Amazon Associate, I earn from qualifying purchases*
+
+Or go to Amazon/AliExpress and order a board e.g.:
+https://amzn.eu/d/0draNz1M
+
+For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a HAT for handling 12V to board input voltage.
+
 ## Supported heat pumps
 
-Brand: **NIBE** (RS485 / NIBE Modbus, not S-series Modbus-TCP).
+Brand: **NIBE** F-series.
 
 Auto-detected from the pump's announcement frame — no model setting needed. If your model is not listed, the bridge still runs with a generic register set.
 
@@ -17,23 +39,20 @@ Auto-detected from the pump's announcement frame — no model setting needed. If
 | F ground-source | F1145, F1155, F1245, F1255, F1345, F1355 |
 | F exhaust-air | F370, F470, F730, F750 |
 | Indoor modules | VVM225, VVM310, VVM320, VVM325, VVM500 |
-| Control / accessories | SMO40, SHK200S, HMA60, VPK8R, STAR12, TehowattiAir |
 
-Register maps live in `components/heatwhisper/models/*.json` (28 files: the NIBE models above, plus S-series maps, and native Modbus-RTU maps for Lambda/Thermia/Dimplex/Daikin/Mitsubishi — see Modbus-RTU section).
-
-Nibe MODBUS40 (RTU accessory 067 144) covers 16 NIBE models: F1145, F1155, F1245, F1255, F1345, F1355, F370, F470, F730, F750, VVM225, VVM310, VVM320, VVM325, VVM500, SMO40. Five more native Modbus-RTU maps ship in `transports.json` (21 entries total): Lambda_EUL, Thermia_Genesis, Dimplex_WPM, Daikin_Altherma3, Mitsubishi_Ecodan. `model:` in modbus mode must be one of the `transports.json` entries. S-series (S1255, VVMS320, …) is Modbus-TCP only — no bridge needed; their JSON maps are vendored but not usable over this RS485 bridge (the picker lists every catalog file, so ignore the S-series entries).
+Register maps live in `components/heatwhisper/models/*.json` (All NIBE models above, other files are there as a reference for now).
 
 ## What you need
 
-- ESP32, ESP32-S3 RS485-CAN, or Raspberry Pi Pico W
-- RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1)
+- ESP32, ESP32-S3, or Raspberry Pi Pico W (see recommended board above)
+- RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1) (Only if you don't have the recommended board)
 - NIBE pump with a free RS485 port
-- Home Assistant with the ESPHome integration
+- Home Assistant with the ESPHome integration or other smart home system that can communicate with ESPHome or over MQTT.
 
 | Board | TX | RX | Flashing |
 |---|---|---|---|
-| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | `esphome run` or web flasher (`index.html`) |
-| ESP32-S3 RS485-CAN (`esp32-s3-devkitc-1`) | GPIO17 | GPIO18 (EN GPIO21) | `esphome run` or web flasher (`index.html`) |
+| ESP32 (`esp32dev`) | GPIO17 | GPIO16 | `esphome run` or web flasher |
+| ESP32-S3 RS485-CAN (`esp32-s3-devkitc-1`) | GPIO17 | GPIO18 (EN GPIO21) | `esphome run` or web flasher |
 | Pico W (`rpipicow`) | GPIO4 | GPIO5 | `firmware.uf2` via USB mass-storage (BOOTSEL) |
 
 Optional `flow_control_pin` under `heatwhisper:` (e.g. GPIO18) for DIY transceivers needing manual direction control. Without it, an auto-direction transceiver is assumed. This is separate from the ESP32-S3 RS485-CAN package, which sets UART-level `flow_control_pin: GPIO21` in `packages/esp32_s3_rs485.yaml` (onboard transceiver needs manual DE — not auto-direction).
@@ -42,7 +61,7 @@ Optional `flow_control_pin` under `heatwhisper:` (e.g. GPIO18) for DIY transceiv
 
 ### 1. Flash from the browser
 
-Go to the GitHub Pages flasher, plug the board in over USB, click Install. The manifest picks ESP32 vs ESP32-S3 automatically. After flashing, click **Configure Wi-Fi** (Improv over USB). Skipped it? Join the fallback AP `HeatWhisper` (password `heatwhisper01`) and pick your network in the captive portal.
+Go to the GitHub Pages flasher [Stable](https://burken-dev.github.io/heat-whisper/) or [Beta](https://burken-dev.github.io/heat-whisper/beta/), plug the board in over USB, click "Connect". The manifest picks ESP32 vs ESP32-S3 automatically. After flashing, click **Configure Wi-Fi** (Improv over USB). Skipped it? Join the fallback AP `HeatWhisper` (password `heatwhisper01`) and pick your network in the captive portal.
 
 Local build instead: `esphome run heatwhisper_esp32_s3_rs485.yaml` (or `heatwhisper_esp32.yaml`). No `secrets.yaml` needed — the factory image ships open (no API key, no OTA/web passwords) so HA can discover it. Add passwords after adoption (see Hardening).
 
@@ -61,7 +80,7 @@ Service menu (hold `Back` 7s) → `5.2 System settings`: enable `Modbus` (requir
 1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot (via the ESPHome restart button).
 2. The selection is stored in flash and survives OTA. Fewer registers = faster poll cycle, so enable only what you need.
 
-The page also holds the other runtime settings (all saved to flash, reboot to apply): NIBE model pin / Autodetect (pins the catalog filter until the next pump announcement overwrites it), Modbus-RTU setup (see below), listen-only (passive) toggle, and a `Reset pump alarm` button (writes 1 to 45171 — NIBE models only).
+The page also holds the other runtime settings (all saved to flash, reboot to apply): NIBE model pin / Autodetect (pins the catalog filter until the next pump announcement overwrites it), Modbus-RTU setup (see below), and a `Reset pump alarm` button (writes 1 to 45171 — NIBE models only).
 
 Done — sensors appear in Home Assistant and writable registers appear as numbers/switches/selects.
 
@@ -72,7 +91,6 @@ Adopt in the ESPHome dashboard (`dashboard_import` is built in), then add `api` 
 ### Troubleshooting
 
 - No values? Check A/B wiring (try swapping), confirm decoded temps at `http://<node>`, then re-check the pump port.
-- Advanced listen-only bring-up: tick `listen-only (passive, no TX)` at `http://<node>/heatwhisper/registers`, save, reboot — decode first, untick to enable TX. (`passive: true` under `heatwhisper:` in YAML does the same but needs a recompile.)
 
 ## Default entities
 
@@ -96,7 +114,6 @@ Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 4704
 heatwhisper:
   id: heatwhisper_bridge
   uart_id: heatwhisper_uart
-  # passive: true          # decode-only bring-up (or tick listen-only in the picker — no recompile)
   # flow_control_pin: GPIO18  # heatwhisper-level DE pin for DIY transceivers (S3 package uses UART-level GPIO21 instead)
   # extra_poll: [10001]    # poll-without-entity (sniffing)
 ```
@@ -139,9 +156,5 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all 
 - Writes ignored for addr < 20000: dropped by design, never sent.
 - `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
 - Wi-Fi wrong? Hold out, or press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
-
-## Non-goals
-
-S-series Modbus-TCP, price/weather/curve logic, runtime JSON, per-model hand YAML.
 
 License: MIT. Register maps vendored under their own MIT license (`components/heatwhisper/models/LICENSE`).

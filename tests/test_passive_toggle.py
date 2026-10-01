@@ -1,10 +1,10 @@
-# tests/test_passive_toggle.py — passive toggle in picker UI (no recompile).
+# tests/test_passive_toggle.py — verify passive mode is completely removed.
 import os
 
 REPO = os.path.join(os.path.dirname(__file__), "..")
 CPP = os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")
 HDR = os.path.join(REPO, "components", "heatwhisper", "heatwhisper.h")
-PICKER = os.path.join(REPO, "components", "heatwhisper", "picker.h")
+INIT_PY = os.path.join(REPO, "components", "heatwhisper", "__init__.py")
 
 
 def _read(p):
@@ -12,33 +12,36 @@ def _read(p):
         return fh.read()
 
 
-def test_passive_persisted_in_flash():
+def test_passive_removed_from_python_schema():
+    src = _read(INIT_PY)
+    assert "passive" not in src
+
+
+def test_passive_removed_from_header():
     src = _read(HDR)
-    assert "HeatWhisperPassive" in src
-    assert "load_passive" in src and "save_passive" in src
+    assert "HeatWhisperPassive" not in src
+    assert "set_passive" not in src
+    assert "load_passive" not in src
+    assert "save_passive" not in src
+    assert "is_passive" not in src
+    assert "apply_runtime_passive_" not in src
+    assert "passive_" not in src
 
 
-def test_setup_applies_runtime_passive_before_entities():
+def test_passive_removed_from_cpp_runtime():
     src = _read(CPP)
-    setup = src.split("void HeatWhisperComponent::setup")[1].split("void HeatWhisperComponent::tx_")[0]
-    assert "apply_runtime_passive_" in setup
-    assert setup.index("apply_runtime_mode_") < setup.index("apply_runtime_passive_")
-    assert setup.index("apply_runtime_passive_") < setup.index("create_entities")
+    assert "apply_runtime_passive_" not in src
+    assert "HW_PASSIVE_TYPE" not in src
+    assert "passive_" not in src
+    assert "if (passive_)" not in src
+    assert "if (!passive_)" not in src
 
 
-def test_picker_json_exposes_passive():
+def test_picker_has_no_passive_controls():
     src = _read(CPP)
-    body = src.split("HeatWhisperPickerHandler::list_json_")[1].split("HeatWhisperPickerHandler::handle_save_")[0]
-    assert '"passive"' in body or "'passive'" in body or "passive" in body
-
-
-def test_mode_save_accepts_passive():
-    src = _read(CPP)
-    body = src.split("HeatWhisperPickerHandler::handle_mode_save_")[1].split("#endif")[0]
-    assert "passive" in body
-    assert "400" in body
-
-
-def test_picker_ui_has_passive_checkbox():
-    src = _read(CPP)
-    assert "psv" in src and "passive" in src.lower()
+    assert "id=\"psv\"" not in src
+    assert "id='psv'" not in src
+    assert "listen-only" not in src
+    assert '"passive":' not in src
+    assert "arg(\"passive\")" not in src
+    assert "arg('passive')" not in src

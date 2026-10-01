@@ -43,27 +43,7 @@ bool HeatWhisperComponent::save_mode(uint8_t mode, const char *model) {
   strncpy(m.model, model, sizeof(m.model) - 1);
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperMode>(HW_MODE_TYPE, true);
   return pref.save(&m);
-}
-static const uint32_t HW_PASSIVE_TYPE = 0x68777073UL;  // keep: passive override survives OTA
-bool HeatWhisperComponent::load_passive(HeatWhisperPassive *out) {
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
-  if (!pref.load(out) || out->version != 1 || out->passive > 1) return false;
-  return true;
-}
-bool HeatWhisperComponent::save_passive(bool passive) {
-  HeatWhisperPassive m{};
-  m.version = 1;
-  m.passive = passive ? 1 : 0;
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperPassive>(HW_PASSIVE_TYPE, true);
-  return pref.save(&m);
-}
-// apply_runtime_passive_: NVS override wins over YAML; absent/corrupt NVS
-// keeps the YAML default so first boot is unchanged.
-void HeatWhisperComponent::apply_runtime_passive_() {
-  HeatWhisperPassive m{};
-  if (!load_passive(&m)) return;
-  passive_ = (m.passive != 0);
-}
+
 // apply_runtime_mode_: flash override wins over codegen; runs before entities
 // so list_json_/create_entities see the effective mode. Nibe (0) clears any
 // stale codegen model so "not heard yet" reads correctly.
@@ -235,7 +215,6 @@ void HeatWhisperComponent::setup() {
     flow_pin_->digital_write(false);
   }
   apply_runtime_mode_();
-  apply_runtime_passive_();
   create_entities();
   if (!modbus_) {
     queue_write(45171, 1);  // Reset startup alarm (matches NibePi sendQueue)
@@ -385,7 +364,6 @@ bool HeatWhisperComponent::decode_modbus_(uint16_t addr, const uint16_t *words, 
   return true;
 }
 void HeatWhisperComponent::poll_one_() {
-  if (passive_) return;
   if (pending_) {  // timeout: previous request unanswered
     if (++retry_ >= 3) {
       pending_ = false;
@@ -511,7 +489,6 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if (f != nullptr && f[2] == kModbus40Addr) modbus40_seen_ = true;
   if (f[2] == kModbus40Addr && f[3] == 0x69 && f[4] == 0x00) {
-    if (passive_) return;
     size_t laps = reads_.size();
     bool sent = false;
     while (laps-- > 0 && !reads_.empty()) {
@@ -524,7 +501,6 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     }
   } else if (f[2] == kModbus40Addr && f[3] == 0x6B && f[4] == 0x00) {
     modbus40_seen_ = true;
-    if (passive_) return;
     if (!writes_.empty()) {
       auto w = writes_.front(); writes_.pop();
       uint8_t o[10];
@@ -533,7 +509,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     } else send_ack_();
   } else if (f[3] == 0x68 || f[3] == 0x6A || f[3] == 0x62 || f[3] == 0x6D) {
     if (f[2] != kModbus40Addr) return;
-    if (!passive_) send_ack_();
+    send_ack_();
     if (f[3] == 0x6D) {
       model_ = nibe::parse_model(f, n);
       if (!model_.empty()) {
@@ -578,13 +554,12 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
       }
     }
   } else if (f[3] == 0xEE && f[2] == kModbus40Addr) {
-    if (passive_) return;
     uint8_t r[7];
     nibe::build_rmu_version(r);  // MODBUS40 accessory version == C0 EE 03 EE 03 01 C1
     tx_(r, 7);
     return;
   } else if (f[2] == kModbus40Addr) {
-    if (!passive_) send_ack_();
+    send_ack_();
   }
 }
 void HeatWhisperComponent::set_poll_registers(const std::vector<uint16_t> &addrs) {
@@ -681,7 +656,6 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <details id="mdet"><summary>Modbus-RTU setup (advanced)</summary>
 <p><select id="mm"></select> <button id="mgo">Detect &amp; save</button>
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
-<p><label><input type="checkbox" id="psv"> listen-only (passive, no TX)</label> <button id="psvgo">Save</button> <span id="pmsg"></span></p>
 <p><span class="k">Pump menu 5.2: Modbus ON, all RMU systems OFF — the bridge emulates MODBUS40 (0x20).</span> <span id="rmumsg"></span></p>
 <p><button id="rst">Reset pump alarm (45171, NIBE only)</button> <span id="rstmsg"></span></p>
 <p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
@@ -694,7 +668,6 @@ S=document.getElementById('save');let regs=[];
 const MM=document.getElementById('mm'),MG=document.getElementById('mgo'),
 MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
 DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
-const PV=document.getElementById('psv'),PG=document.getElementById('psvgo'),PM=document.getElementById('pmsg');
 const RN=document.getElementById('rmumsg');
 const NM=document.getElementById('nm'),NMG=document.getElementById('nmgo'),
 NMA=document.getElementById('nmauto'),NMM=document.getElementById('nmmsg'),
@@ -715,7 +688,7 @@ MM.innerHTML=(j.modbus_models||[]).map(m=>'<option>'+esc(m)+'</option>').join(''
 if(j.runtime&&j.runtime.model)MM.value=j.runtime.model;
 if(j.suggest_modbus){DET.open=true;
 BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 accessory)? Pick the model, Detect & save, then reboot.';}
-else BAN.textContent='';PV.checked=j.passive==1||j.passive=='1';
+else BAN.textContent='';
 RN.textContent=j.modbus40_seen==1||j.modbus40_seen=='1'?'Pump is polling MODBUS40 (0x20) — reads/writes live.':'Pump has not polled 0x20 yet — enable Modbus in 5.2 (keep RMU OFF), then reboot.';
 render();});
 S.onclick=()=>{sync();const a=regs.filter(r=>r.en).map(r=>r.a).join(',');
@@ -729,7 +702,6 @@ body:b}).then(async r=>{GM.textContent=r.ok?ok:'Save failed: '+await r.text()}).
 MG.onclick=()=>mpost('mode=modbus&model='+encodeURIComponent(MM.value),
 'Saved. Reboot via ESPHome restart to apply — values should appear within ~30s.');
 MN.onclick=()=>mpost('mode=nibe','Saved. Reboot via ESPHome restart to apply.');
-PG.onclick=()=>{const v=PV.checked?'1':'0';fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'passive='+v}).then(async r=>{PM.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()}).catch(e=>PM.textContent='Save failed: '+e);};
 </script></body></html>)HTML";
 bool HeatWhisperPickerHandler::canHandle(AsyncWebServerRequest *request) const {
 #ifdef USE_ESP32
@@ -872,8 +844,6 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   picker_esc_(o, rmodel.c_str());
   o += "\"},\"suggest_modbus\":";
   o += rmodel.empty() ? '1' : '0';
-  o += ",\"passive\":";
-  o += this->parent_->is_passive() ? '1' : '0';
   // MODBUS40 poll status: whether the pump has polled 0x20 yet.
   o += ",\"modbus40_seen\":";
   o += this->parent_->modbus40_seen() ? '1' : '0';
@@ -934,21 +904,6 @@ void HeatWhisperPickerHandler::handle_save_(AsyncWebServerRequest *request) {
 void HeatWhisperPickerHandler::handle_mode_save_(AsyncWebServerRequest *request) {
   std::string mode = request->hasArg("mode") ? request->arg("mode").c_str() : std::string();
   std::string model = request->hasArg("model") ? request->arg("model").c_str() : std::string();
-  std::string passive = request->hasArg("passive") ? request->arg("passive").c_str() : std::string();
-  if (!passive.empty()) {
-    if (passive != "0" && passive != "1") {
-      request->send(400, "text/plain", "need passive=0|1");
-      return;
-    }
-    if (!this->parent_->save_passive(passive == "1")) {
-      request->send(500, "text/plain", "save failed");
-      return;
-    }
-    if (mode.empty() && model.empty()) {
-      request->send(200, "text/plain", "saved,reboot");
-      return;
-    }
-  }
   if (mode == "nibe") {
     const char *m = model.empty() ? "" : model.c_str();
     if (!this->parent_->save_mode(0, m)) {

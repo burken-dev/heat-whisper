@@ -35,7 +35,6 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Optional("model", default=""): cv.string,
     cv.Optional("modbus_address", default=1): cv.int_range(min=1, max=247),
     cv.Optional(CONF_EXTRA_POLL, default=[]): cv.ensure_list(cv.int_),
-    cv.Optional("passive", default=False): cv.boolean,
     cv.Optional("flow_control_pin"): pins.gpio_output_pin_schema,
     cv.GenerateID(CONF_PICKER_ID): cv.declare_id(HeatWhisperPickerHandler),
     cv.GenerateID(CONF_WEB_SERVER_BASE_ID): cv.use_id(web_server_base.WebServerBase),
@@ -47,7 +46,6 @@ async def to_code(config):
     # sensor platform exists to trigger it — define what sensor codegen would.
     cg.add_define("USE_SENSOR_FILTER")
     await uart.register_uart_device(var, config)
-    cg.add(var.set_passive(config["passive"]))
     cg.add_define("HW_FW_VERSION", f'"{resolve_fw_version()}"')
     if "flow_control_pin" in config:
         pin = await cg.gpio_pin_expression(config["flow_control_pin"])

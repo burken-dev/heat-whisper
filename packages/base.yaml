@@ -58,9 +58,6 @@ heatwhisper:
   # from its announcement — no model setting needed.
   # Pump menu 5.2 (service menu, hold Back 7s): Modbus ON, all RMU systems OFF.
   # The bridge emulates a MODBUS40 accessory (fixed 0x20) — no slot to pick.
-  # Troubleshooting only: passive: true is listen-only bring-up (decode first,
-  # TX later). Default is TX enabled.
-  # passive: true
   # extra_poll: [10001]  # optional poll-without-entity (bring-up sniffing)
   # WARNING: writes to addr <20000 (1xxxx range) are dropped, never sent in the 0x6B slot.
   # flow_control_pin: GPIO18  # optional RS485 auto-direction pin (absent = no direction control)

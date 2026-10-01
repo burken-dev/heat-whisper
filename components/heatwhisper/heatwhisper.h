@@ -84,11 +84,7 @@ struct HeatWhisperMode {
   char model[24]{};
 };
 static_assert(sizeof(HeatWhisperMode{}) == 32, "HeatWhisperMode layout");
-struct HeatWhisperPassive {
-  uint32_t version{1};
-  uint8_t passive{0};
-};
-static_assert(sizeof(HeatWhisperPassive{}) == 8, "HeatWhisperPassive layout");
+
 // NIBE-bus slave address: we emulate a MODBUS40 accessory (fixed 0x20).
 static constexpr uint8_t kModbus40Addr = 0x20;
 // ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
@@ -101,7 +97,6 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void set_protocol_is_modbus(bool m) { modbus_ = m; }
   void set_modbus_address(uint8_t a) { modbus_addr_ = a; }
   void set_model(const std::string &m) { model_ = m; }
-  void set_passive(bool p) { passive_ = p; }
   void set_flow_control_pin(esphome::GPIOPin *p) { flow_pin_ = p; }
   void setup() override;
   void set_poll_registers(const std::vector<uint16_t> &addrs);
@@ -119,10 +114,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool save_selection(const uint16_t *addrs, uint16_t n);
   bool load_mode(HeatWhisperMode *out);
   bool save_mode(uint8_t mode, const char *model);
-  bool load_passive(HeatWhisperPassive *out);
-  bool save_passive(bool passive);
   bool modbus40_seen() const { return modbus40_seen_; }
-  bool is_passive() const { return passive_; }
   void create_entities();
   virtual void on_value(uint16_t addr, float v);  // fans out to entities (Task 5)
   const std::string &get_model() const { return model_; }
@@ -135,7 +127,6 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
   void apply_runtime_mode_();
-  void apply_runtime_passive_();
   void on_frame_(const uint8_t *f, uint8_t n);
   void poll_one_();
   void on_modbus_frame_(const uint8_t *f, size_t n);
@@ -155,7 +146,6 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   uint8_t pending_fc_{0};
   uint8_t pending_cnt_{0};
   bool pending_{false};
-  bool passive_{false};
   esphome::GPIOPin *flow_pin_{nullptr};
   std::string model_;
   std::vector<uint8_t> rx_;
