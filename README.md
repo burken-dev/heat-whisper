@@ -23,7 +23,7 @@ You can support the project by using an affiliate link:
 
 *As an Amazon Associate, I earn from qualifying purchases*
 
-Or go to Amazon/AliExpress or any other place where you can find and order a board e.g.:
+Or go to Amazon/AliExpress or any other place where you can find ESP32 boards. Below is a non-affiliate link to :
 - https://amzn.eu/d/0draNz1M
 
 For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a HAT for handling 12V to board input voltage.
