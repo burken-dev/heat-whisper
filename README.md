@@ -23,7 +23,7 @@ You can support the project by using an affiliate link:
 
 *As an Amazon Associate, I earn from qualifying purchases*
 
-Or go to Amazon/AliExpress or any other place where you can find ESP32 boards. Below is a non-affiliate link to :
+Or go to Amazon/AliExpress or any other place where you can find ESP32 boards. Below is a non-affiliate link to Amazon:
 - https://amzn.eu/d/0draNz1M
 
 For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a HAT for handling 12V to board input voltage.
@@ -94,13 +94,13 @@ Adopt in the ESPHome dashboard (`dashboard_import` is built in), then add `api` 
 
 ## Default entities
 
-Created at first boot (18 registers):
+Created at first boot (12 registers):
 
-Sensors: 40004 BT1 Outdoor, 40008 Supply S1, 40012 Return, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 43009 Calculated Supply, 43136 Compressor Frequency, 40033 Room S1, 43144 Compressor Energy Total, 43305 Compressor Energy HW.
+Sensors: 40004 BT1 Outdoor, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 40033 Room S1, 45001 Alarm.
 
-Numbers (writable): 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10), 47007 Heat Curve S1 (0…15), 47043 HW Luxury Start Temp (5…70 °C).
+Numbers (writable): 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10).
 
-Select: 47041 HW Comfort (Eco, Normal, Luxury, Smart = raw 0, 1, 2, 4).
+Select: 47041 HW Comfort (Eco, Normal, Luxury, Smart = raw 0, 1, 2, 4), 48132 Temporary Lux (Off, 3h, 6h, 12h, One time = raw 0, 1, 2, 3, 4).
 
 Switches: 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1).
 
