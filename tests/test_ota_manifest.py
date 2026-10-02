@@ -47,28 +47,43 @@ def test_release_skill_enforces_workflow():
     assert "Pico" in skill
     assert "git tag vX.Y.Z" not in skill  # script is the only entry point
 
-def test_release_script_resolves_next_tags():
+def test_release_script_resolves_next_tags(tmp_path):
     import subprocess
-    p = os.path.join(REPO, "scripts", "release.sh")
+    # Initialize a temporary git repo to test tag resolution in isolation
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "tag", "v0.2.0-beta.1"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "tag", "v0.2.0-beta.2"], cwd=tmp_path, check=True)
+
+    p = os.path.abspath(os.path.join(REPO, "scripts", "release.sh"))
     env = {**os.environ, "DRY_RUN": "1"}
 
-    # stable minor should resolve to v0.3.0 (since v0.2.0 is the latest stable tag)
-    res = subprocess.run([p, "stable", "minor"], env=env, capture_output=True, text=True)
+    # With v0.1.0 stable and v0.2.0-beta.* in progress, stable minor must resolve to v0.2.0 (not v0.1.0 or v0.0.0)
+    res = subprocess.run([p, "stable", "minor"], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
-    assert res.stdout.strip() == "v0.3.0"
+    assert res.stdout.strip() == "v0.2.0"
 
-    # stable patch should resolve to v0.2.1
-    res = subprocess.run([p, "stable", "patch"], env=env, capture_output=True, text=True)
+    # stable patch resolves to v0.1.1
+    res = subprocess.run([p, "stable", "patch"], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
-    assert res.stdout.strip() == "v0.2.1"
+    assert res.stdout.strip() == "v0.1.1"
 
-    # stable major should resolve to v1.0.0
-    res = subprocess.run([p, "stable", "major"], env=env, capture_output=True, text=True)
+    # stable major resolves to v1.0.0
+    res = subprocess.run([p, "stable", "major"], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
     assert res.stdout.strip() == "v1.0.0"
 
-    # beta default should resolve to v0.2.0-beta.19
-    res = subprocess.run([p, "beta"], env=env, capture_output=True, text=True)
+    # beta 0.2.0 resolves to next beta number (v0.2.0-beta.3)
+    res = subprocess.run([p, "beta", "0.2.0"], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
-    assert res.stdout.strip() == "v0.2.0-beta.19"
+    assert res.stdout.strip() == "v0.2.0-beta.3"
+
+    # Once v0.2.0 is tagged:
+    subprocess.run(["git", "tag", "v0.2.0"], cwd=tmp_path, check=True)
+    res = subprocess.run([p, "stable", "minor"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.3.0"
 
