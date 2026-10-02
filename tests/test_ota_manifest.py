@@ -46,3 +46,44 @@ def test_release_skill_enforces_workflow():
     assert "ota_update.yaml" in skill
     assert "Pico" in skill
     assert "git tag vX.Y.Z" not in skill  # script is the only entry point
+
+def test_release_script_resolves_next_tags(tmp_path):
+    import subprocess
+    # Initialize a temporary git repo to test tag resolution in isolation
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "tag", "v0.1.0"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "tag", "v0.2.0-beta.1"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "tag", "v0.2.0-beta.2"], cwd=tmp_path, check=True)
+
+    p = os.path.abspath(os.path.join(REPO, "scripts", "release.sh"))
+    env = {**os.environ, "DRY_RUN": "1"}
+
+    # With v0.1.0 stable and v0.2.0-beta.* in progress, stable minor must resolve to v0.2.0 (not v0.1.0 or v0.0.0)
+    res = subprocess.run([p, "stable", "minor"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.2.0"
+
+    # stable patch resolves to v0.1.1
+    res = subprocess.run([p, "stable", "patch"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.1.1"
+
+    # stable major resolves to v1.0.0
+    res = subprocess.run([p, "stable", "major"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v1.0.0"
+
+    # beta 0.2.0 resolves to next beta number (v0.2.0-beta.3)
+    res = subprocess.run([p, "beta", "0.2.0"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.2.0-beta.3"
+
+    # Once v0.2.0 is tagged:
+    subprocess.run(["git", "tag", "v0.2.0"], cwd=tmp_path, check=True)
+    res = subprocess.run([p, "stable", "minor"], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.3.0"
+
