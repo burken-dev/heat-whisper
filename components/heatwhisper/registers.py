@@ -69,8 +69,8 @@ def is_known(addr: int, models: dict) -> bool:
 
 import json as _json
 MAX_SELECTION = 50
-DEFAULT_ENABLED = [40004, 40008, 40012, 40013, 40014, 43009, 43136, 43005,
-                   40033, 43144, 43305, 45001, 47011, 47041, 47371, 47370, 47387, 48132, 47043]
+DEFAULT_ENABLED = [40004, 40013, 40014, 43005,
+                   40033, 45001, 47011, 47041, 47371, 47370, 47387, 48132]
 
 def load_hints(path):
     with open(path) as fh:

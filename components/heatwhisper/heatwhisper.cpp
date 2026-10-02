@@ -81,13 +81,10 @@ void HeatWhisperComponent::apply_runtime_mode_() {
 // copied verbatim from packages/base.yaml so HA entity names stay identical.
 // Task 5 deletes the YAML blocks; this table is then the single source.
 static const struct { uint16_t addr; const char *name; } HW_FACTORY_NAMES[] = {
-  {40004, "BT1 Outdoor"}, {40008, "Supply Temp S1"}, {40012, "Return Temp"},
-  {40013, "Hot Water Top BT7"}, {40014, "Hot Water BT6"}, {43009, "Calculated Supply"},
-  {43136, "Compressor Frequency"}, {43005, "Degree Minutes"}, {40033, "Room Temp S1"},
-  {43144, "Compressor Energy Total"}, {43305, "Compressor Energy HW"}, {45001, "Alarm"},
+  {40004, "BT1 Outdoor"}, {40013, "Hot Water Top BT7"}, {40014, "Hot Water BT6"},
+  {43005, "Degree Minutes"}, {40033, "Room Temp S1"}, {45001, "Alarm"},
   {47011, "Heat Offset S1"}, {47041, "Hot Water Comfort Mode"}, {47371, "Allow Heating"},
   {47370, "Allow Additive Heating"}, {47387, "Hot Water Production"}, {48132, "Temporary Lux"},
-  {47043, "Hot Water Luxury Start Temp"},
 };
 static const char *base_name_for(uint16_t addr) {
   for (uint8_t i = 0; i < sizeof(HW_FACTORY_NAMES) / sizeof(HW_FACTORY_NAMES[0]); i++)
