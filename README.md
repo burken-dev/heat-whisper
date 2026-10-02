@@ -86,7 +86,7 @@ Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the
 
 Settings → Devices & Services → ESPHome — the node appears automatically (no API key on factory image). Click Add. The pump model is autodetected from its announcement (`Heat Pump Model` sensor, empty until first heard) — no model setting, no Modbus vs NIBE choice for NIBE pumps.
 
-Service menu (hold `Back` 7s) → `5.2 System settings`: enable `Modbus` (required for F-series telemetry & auto-detection). Leave all RMU systems OFF — the bridge emulates a MODBUS40 accessory (fixed 0x20). Open `http://<node>/heatwhisper/registers` — `Model: F... (nibe|modbus)` confirms communication is live (`Waiting for pump announcement` = nothing heard yet).
+**Caveat:** Don't get greedy with settings and changing them too often! Think hours instead of minutes when creating your logic to not wear out the EEPROM in the Nibe.
 
 ### 4. Pick registers
 
