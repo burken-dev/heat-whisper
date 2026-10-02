@@ -67,6 +67,19 @@ Local build instead: `esphome run heatwhisper_esp32_s3_rs485.yaml` (or `heatwhis
 
 ### 2. Wire it up
 
+![Mounting instructions](docs/pics/install_instructions.png)
+
+1. Turn off the heat pump.
+2. Remove the top cover (like when you're about to clean the filter)
+3. Look on the bottom of the heat pump and unscrew the two screws and then lift the front off the heat pump.
+4. Open the latch and connect the wires as seen in the picture above.
+5. Power on the heat pump and check that the Heat Whisper powers up
+6. Hold down the "back" button until the service menu appears. Go to 5.2 and activate "Modbus"
+
+You can also check the Modbus 40 [installation-manual](https://assetstore.nibe.se/hcms/v2.4/entity/document/23567/storage/MDIzNTY3LzAvbWFzdGVy/download/Installat%C3%B6rshandbok_Tillbeh%C3%B6r_MODBUS%2040_031725-10.pdf) for how to connect it to different models.
+
+NB: The heat pump gives 12V so make sure your board can handle that input to power the board!
+
 Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the transceiver from the MCU (3.3 V or 5 V per module). Waveshare S3 RS485-CAN: onboard screw terminals, 120Ω jumper ON for a single-drop bus.
 
 ### 3. Add it to Home Assistant
@@ -156,5 +169,8 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all 
 - Writes ignored for addr < 20000: dropped by design, never sent.
 - `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
 - Wi-Fi wrong? Hold out, or press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
+
+## Thanks to
+This project is inspired by [NibePi](https://github.com/anerdins/nibepi). Big thanks for the register mappings and such!
 
 License: MIT. Register maps vendored under their own MIT license (`components/heatwhisper/models/LICENSE`).
