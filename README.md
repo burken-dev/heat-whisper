@@ -18,13 +18,13 @@ Boards: ESP32 (`heatwhisper_esp32.yaml`), ESP32-S3 RS485-CAN (`heatwhisper_esp32
 Recommended board is the Waveshare ESP32-S3 with RS485/CAN, it requires no soldering and is as close to plug n' play as you can get.
 
 You can support the project by using an affiliate link:
-https://link.amazon/B06WtBCo5 (without external antenna)
-https://link.amazon/B09Kg52Ee (with external antenna)
+- https://link.amazon/B06WtBCo5 (without external antenna)
+- https://link.amazon/B09Kg52Ee (with external antenna)
 
 *As an Amazon Associate, I earn from qualifying purchases*
 
-Or go to Amazon/AliExpress and order a board e.g.:
-https://amzn.eu/d/0draNz1M
+Or go to Amazon/AliExpress or any other place where you can find and order a board e.g.:
+- https://amzn.eu/d/0draNz1M
 
 For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a HAT for handling 12V to board input voltage.
 

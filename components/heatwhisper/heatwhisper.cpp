@@ -43,6 +43,7 @@ bool HeatWhisperComponent::save_mode(uint8_t mode, const char *model) {
   strncpy(m.model, model, sizeof(m.model) - 1);
   ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperMode>(HW_MODE_TYPE, true);
   return pref.save(&m);
+}
 
 // apply_runtime_mode_: flash override wins over codegen; runs before entities
 // so list_json_/create_entities see the effective mode. Nibe (0) clears any
