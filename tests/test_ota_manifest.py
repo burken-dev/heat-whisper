@@ -46,3 +46,29 @@ def test_release_skill_enforces_workflow():
     assert "ota_update.yaml" in skill
     assert "Pico" in skill
     assert "git tag vX.Y.Z" not in skill  # script is the only entry point
+
+def test_release_script_resolves_next_tags():
+    import subprocess
+    p = os.path.join(REPO, "scripts", "release.sh")
+    env = {**os.environ, "DRY_RUN": "1"}
+
+    # stable minor should resolve to v0.3.0 (since v0.2.0 is the latest stable tag)
+    res = subprocess.run([p, "stable", "minor"], env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.3.0"
+
+    # stable patch should resolve to v0.2.1
+    res = subprocess.run([p, "stable", "patch"], env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.2.1"
+
+    # stable major should resolve to v1.0.0
+    res = subprocess.run([p, "stable", "major"], env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v1.0.0"
+
+    # beta default should resolve to v0.2.0-beta.19
+    res = subprocess.run([p, "beta"], env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
+    assert res.stdout.strip() == "v0.2.0-beta.19"
+
