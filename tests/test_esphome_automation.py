@@ -33,3 +33,14 @@ def test_dependabot_covers_esphome_pin_and_actions():
     assert "package-ecosystem: github-actions" in cfg
     assert cfg.count("interval: weekly") == 2
 
+
+def test_beta_on_bump_workflow_contract():
+    yml = _read(".github", "workflows", "beta-on-bump.yml")
+    assert "branches: [main]" in yml and "paths: [requirements.txt]" in yml
+    assert "contents: write" in yml and "actions: write" in yml
+    assert "fetch-depth: 0" in yml
+    assert 'python-version: "3.12"' in yml
+    assert "pip install pytest -r requirements.txt" in yml
+    assert "scripts/release.sh beta auto" in yml
+    assert 'gh workflow run build.yml --ref "$TAG"' in yml
+
