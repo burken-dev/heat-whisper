@@ -1,0 +1,36 @@
+name: beta-on-bump
+# After an ESPHome pin bump (usually a merged Dependabot PR) lands on main, tag and publish a beta.
+# Design: docs/superpowers/specs/2026-10-03-esphome-auto-update-design.md
+on:
+  push:
+    branches: [main]
+    paths: [requirements.txt]
+concurrency:
+  group: beta-on-bump
+  cancel-in-progress: false
+permissions:
+  contents: write   # push the beta tag
+  actions: write    # dispatch build.yml
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }  # release.sh resolves the beta base from all tags
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }  # ESPHome requires >=3.12
+      - run: pip install pytest -r requirements.txt  # release.sh runs pytest + esphome config
+      - run: cp secrets.yaml.example secrets.yaml || true
+      - id: tag
+        shell: bash
+        run: |
+          scripts/release.sh beta auto | tee "$RUNNER_TEMP/release.log"
+          TAG=$(sed -n 's/^released //p' "$RUNNER_TEMP/release.log" | tail -1)
+          [ -n "$TAG" ] || { echo "no tag reported by release.sh"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      # Tags pushed with GITHUB_TOKEN don't start workflow runs, so dispatch the build explicitly.
+      # With --ref <tag>, GITHUB_REF is the tag and build.yml's release/pages jobs + beta channel apply.
+      - run: gh workflow run build.yml --ref "$TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}

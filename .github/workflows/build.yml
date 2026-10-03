@@ -1,5 +1,8 @@
 name: build
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 jobs:
   host-tests:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
       # ponytail: factory image is zero-config (no secrets); keep a dummy file
       # only so local `!secret` experiments don't fail on missing file.
       - run: cp secrets.yaml.example secrets.yaml || true
-      - run: pip install esphome
+      - run: pip install -r requirements.txt
       - run: |
           MANIFEST_URL=https://burken-dev.github.io/heat-whisper/manifest.json
           case "${GITHUB_REF:-}" in *-beta*) MANIFEST_URL=https://burken-dev.github.io/heat-whisper/beta/manifest.json;; esac

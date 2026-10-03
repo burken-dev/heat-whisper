@@ -1,0 +1,17 @@
+# Weekly update PRs. The pip entry keeps the pinned ESPHome (requirements.txt) current;
+# merging it triggers .github/workflows/beta-on-bump.yml. The github-actions entry keeps
+# the actions used by CI from going stale (it never touches requirements.txt).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(ci)"
