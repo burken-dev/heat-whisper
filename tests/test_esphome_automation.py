@@ -24,3 +24,12 @@ def test_build_yml_installs_pinned_esphome():
 
 def test_build_yml_is_dispatchable():
     assert "workflow_dispatch" in _read(".github", "workflows", "build.yml")
+
+
+def test_dependabot_covers_esphome_pin_and_actions():
+    cfg = _read(".github", "dependabot.yml")
+    assert "version: 2" in cfg
+    assert "package-ecosystem: pip" in cfg
+    assert "package-ecosystem: github-actions" in cfg
+    assert cfg.count("interval: weekly") == 2
+
