@@ -153,6 +153,7 @@ Lambda EU-L (EU08/13/15/20/35L) needs no accessory (native RTU); bridge default 
 ## Build / test / release
 
 ```bash
+pip install -r requirements.txt   # pinned ESPHome (same version CI uses)
 python -m pytest tests/ -v
 esphome config heatwhisper_esp32.yaml
 esphome config heatwhisper_esp32_s3_rs485.yaml
