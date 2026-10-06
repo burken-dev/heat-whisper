@@ -56,7 +56,7 @@ jobs:
     needs: compile
     permissions: { contents: write }
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: firmware, path: dist }
       # Stable aliases alongside the raw ESPHome outputs (manifest.json + web flasher use these).
       - run: |
@@ -78,7 +78,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: firmware, path: fw }
       # Stamp web-flasher/OTA manifest from the git tag (v1.2.3 → 1.2.3) so ESP Web Tools and
       # the device update entity see a real version. scripts/stamp_manifest.py derives each
