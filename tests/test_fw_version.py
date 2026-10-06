@@ -59,7 +59,7 @@ def test_resolve_fw_version_all_unsafe_is_dev(monkeypatch):
 def test_codegen_bakes_fw_define():
     src = open(os.path.join(REPO, "components", "heatwhisper", "__init__.py")).read()
     assert '"git", "describe"' in src  # ponytail: argv-list form, no shell (brief said "git describe"; list form never contains that substring)
-    assert 'cg.add_define("HW_FW_VERSION"' in src
+    assert 'cg.add_define("HW_FW_VERSION", resolve_fw_version())' in src
 
 
 def test_header_has_fw_fallback():

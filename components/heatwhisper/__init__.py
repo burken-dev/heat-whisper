@@ -46,7 +46,7 @@ async def to_code(config):
     # sensor platform exists to trigger it — define what sensor codegen would.
     cg.add_define("USE_SENSOR_FILTER")
     await uart.register_uart_device(var, config)
-    cg.add_define("HW_FW_VERSION", f'"{resolve_fw_version()}"')
+    cg.add_define("HW_FW_VERSION", resolve_fw_version())
     if "flow_control_pin" in config:
         pin = await cg.gpio_pin_expression(config["flow_control_pin"])
         cg.add(var.set_flow_control_pin(pin))
