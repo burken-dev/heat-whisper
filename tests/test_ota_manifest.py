@@ -30,7 +30,8 @@ def test_ci_overrides_channel_and_stamps_ota():
     yml = open(os.path.join(REPO, ".github", "workflows", "build.yml")).read()
     assert "-s ota_manifest_url" in yml
     assert "beta/manifest.json" in yml
-    assert "md5sum" in yml
+    assert "python3 scripts/stamp_manifest.py" in yml  # md5 computed there (hashlib)
+    assert "hashlib.md5" in open(os.path.join(REPO, "scripts", "stamp_manifest.py")).read()
 
 def test_release_script_exists_and_validates_semver():
     import stat
@@ -87,3 +88,42 @@ def test_release_script_resolves_next_tags(tmp_path):
     assert res.returncode == 0, f"failed: {res.stderr}\n{res.stdout}"
     assert res.stdout.strip() == "v0.3.0"
 
+
+
+def test_project_version_comes_from_fw_version_substitution():
+    # ESPHome's update entity compares manifest "version" with esphome.project.version.
+    base = open(os.path.join(REPO, "packages", "base.yaml")).read()
+    assert 'version: "${fw_version}"' in base
+    assert "fw_version: dev" in base
+    yml = open(os.path.join(REPO, ".github", "workflows", "build.yml")).read()
+    assert "-s fw_version" in yml or "fw_version \"$FW_VERSION\"" in yml
+
+
+def _stamp(tmp_path, version, base, ota_files):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("stamp_manifest", os.path.join(REPO, "scripts", "stamp_manifest.py"))
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    for name, data in ota_files.items():
+        (tmp_path / name).write_bytes(data)
+    return mod.stamp(os.path.join(REPO, "manifest.json"), version, base, str(tmp_path))
+
+
+def test_stamp_manifest_uses_own_binaries_and_channel_base(tmp_path):
+    import hashlib
+    m = _stamp(tmp_path, "0.2.0-beta.3", "https://x.io/hw/beta/",
+               {"heatwhisper_esp32.ota.bin": b"esp32", "heatwhisper_esp32_s3_rs485.ota.bin": b"s3"})
+    assert m["version"] == "0.2.0-beta.3"
+    esp32, s3 = m["builds"]
+    assert esp32["ota"] == {"md5": hashlib.md5(b"esp32").hexdigest(), "path": "https://x.io/hw/beta/heatwhisper_esp32.ota.bin"}
+    assert s3["ota"] == {"md5": hashlib.md5(b"s3").hexdigest(), "path": "https://x.io/hw/beta/heatwhisper_esp32_s3_rs485.ota.bin"}
+
+
+def test_stamp_manifest_skips_ota_for_missing_binary(tmp_path):
+    m = _stamp(tmp_path, "0.1.0", "https://x.io/hw", {"heatwhisper_esp32.ota.bin": b"esp32"})
+    assert "ota" in m["builds"][0] and "ota" not in m["builds"][1]
+
+
+def test_ci_stamps_both_channels_via_script():
+    yml = open(os.path.join(REPO, ".github", "workflows", "build.yml")).read()
+    assert yml.count("python3 scripts/stamp_manifest.py") == 2  # deployed channel + counterpart channel
+    assert "json.load(open('manifest.json'))" not in yml  # no inline stamping that leaks ota across channels

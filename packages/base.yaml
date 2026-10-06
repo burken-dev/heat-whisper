@@ -1,10 +1,14 @@
 # Factory image is zero-config: no secrets.yaml needed for first flash.
 # Wi-Fi via Improv (USB, web flasher) or fallback AP + captive portal.
 # HA finds the node via native API (no key on factory image).
+substitutions:
+  # Release version (tag minus 'v'); CI overrides with -s fw_version. Must equal the OTA
+  # manifest "version" or the HA update entity never clears. "dev" for local builds.
+  fw_version: dev
 esphome:
   project:
     name: burken-dev.heat-whisper
-    version: "1.0"
+    version: "${fw_version}"
 wifi:
   reboot_timeout: 15min
   power_save_mode: none
