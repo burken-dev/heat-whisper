@@ -153,6 +153,7 @@ Lambda EU-L (EU08/13/15/20/35L) needs no accessory (native RTU); bridge default 
 ## Build / test / release
 
 ```bash
+pip install -r requirements.txt   # pinned ESPHome (same version CI uses)
 python -m pytest tests/ -v
 esphome config heatwhisper_esp32.yaml
 esphome config heatwhisper_esp32_s3_rs485.yaml
@@ -162,6 +163,8 @@ esphome compile heatwhisper_pico_w.yaml
 ```
 
 CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all three boards → artifacts on tags attached to the GitHub release + deployed to GitHub Pages (web flasher).
+
+**Staying current with ESPHome:** the ESPHome version is pinned in `requirements.txt`. Dependabot opens a weekly PR when a new stable ESPHome is out (plus PRs for GitHub Actions updates); PR CI runs the tests and compiles all boards. Merging an ESPHome bump to `main` automatically tags and publishes a **beta** (`.github/workflows/beta-on-bump.yml` → `scripts/release.sh beta auto`). Promote to stable manually with `scripts/release.sh stable patch|minor|major`.
 
 ## Troubleshooting
 

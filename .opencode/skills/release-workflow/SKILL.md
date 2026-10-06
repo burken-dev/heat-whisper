@@ -19,10 +19,12 @@ Never hand-tag. Only entry point:
 
 ```bash
 scripts/release.sh stable patch|minor|major|X.Y.Z
-scripts/release.sh beta [X.Y.Z]
+scripts/release.sh beta [X.Y.Z|auto]
 ```
 
 The script validates semver, runs `pytest` + all three `esphome config`, then tags + pushes. CI does the rest.
+
+`scripts/release.sh beta auto` continues an in-progress beta series, otherwise starts the next patch beta. It is what `.github/workflows/beta-on-bump.yml` runs automatically after a Dependabot ESPHome bump (pinned in `requirements.txt`) is merged to `main`. Promotion to stable stays manual.
 
 ## Managed OTA (standard `update/http_request`)
 
