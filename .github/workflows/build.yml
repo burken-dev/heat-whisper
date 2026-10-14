@@ -45,7 +45,7 @@ jobs:
       - run: |
           cp .esphome/build/heat-whisper-s3/build/firmware.factory.bin fw/heatwhisper_esp32_s3_rs485.factory.bin
           cp .esphome/build/heat-whisper-s3/build/firmware.ota.bin fw/heatwhisper_esp32_s3_rs485.ota.bin
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firmware
           path: fw/
