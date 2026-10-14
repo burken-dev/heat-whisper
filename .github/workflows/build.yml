@@ -64,7 +64,7 @@ jobs:
           cp dist/firmware.ota.bin dist/heatwhisper_esp32.ota.bin
           cp dist/firmware.bin dist/heatwhisper_pico_w.bin
           cp dist/firmware.uf2 dist/heatwhisper_pico_w.uf2
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/**
           prerelease: ${{ contains(github.ref, '-beta') }}
