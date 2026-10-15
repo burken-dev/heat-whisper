@@ -1,6 +1,5 @@
 # tests/test_registers.py
 import json, os
-from components.heatwhisper.registers import DEFAULT_ALLOWLIST, is_known
 
 
 def test_merge_prefers_nonzero_minmax():
@@ -31,21 +30,11 @@ def test_real_43005_resolves_nonzero_minmax():
     assert "-30000" in entry and "30000" in entry
 
 
-def test_is_known_hit_and_miss():
-    models = {"F750": [{"register": "40004", "factor": 10, "size": "s16", "mode": "R"}]}
-    assert is_known(40004, models) is True
-    assert is_known(12345, models) is False
-
 def test_init_uses_extra_poll():
     import os
     src = open(os.path.join(os.path.dirname(__file__), "..", "components", "heatwhisper", "__init__.py")).read()
     assert "extra_poll" in src
     assert 'CONF_REGISTERS = "registers"' not in src
-
-
-def test_smart_allowlist_present():
-    for a in [40033, 43144, 43305, 45001, 47011, 47041, 47371, 47370, 47387, 48132, 47043]:
-        assert a in DEFAULT_ALLOWLIST
 
 
 def test_smart_catalog_decodable_real_models():

@@ -1,7 +1,8 @@
 # components/heatwhisper/registers.py
 SIZE_CODES = {"u8": 0, "s8": 1, "u16": 2, "s16": 3, "u32": 4, "s32": 5}
-DEFAULT_ALLOWLIST = [40004, 40008, 40012, 40013, 40014, 43136, 43005, 40033, 43009, 10001,
-                     43144, 43305, 45001, 47011, 47041, 47370, 47371, 47387, 48132, 47043]
+MAX_SELECTION = 50
+DEFAULT_ENABLED = [40004, 40013, 40014, 43005,
+                   40033, 45001, 47011, 47041, 47371, 47370, 47387, 48132]
 
 def _num(x):
     try:
@@ -13,7 +14,7 @@ def _num(x):
 def canon_unit(u):
     # ponytail: single normalization for catalog units (mojibake + ºC typo),
     # shared by the title table and the HA string-pool mapping.
-    return ((u or "").replace("�", "°").replace("º", "°").strip())
+    return ((u or "").replace("\ufffd", "°").replace("º", "°").strip())
 
 
 # ponytail: unit -> HA device_class; only unambiguous exact matches, else ""
@@ -58,28 +59,6 @@ def _by_reg(models: dict):
                 by_reg[r["register"]] = r
     return by_reg
 
-
-def is_known(addr: int, models: dict) -> bool:
-    want = str(addr)
-    for regs in models.values():
-        for r in regs:
-            if r.get("register") == want:
-                return True
-    return False
-
-import json as _json
-MAX_SELECTION = 50
-DEFAULT_ENABLED = [40004, 40013, 40014, 43005,
-                   40033, 45001, 47011, 47041, 47371, 47370, 47387, 48132]
-
-def load_hints(path):
-    with open(path) as fh:
-        return _json.load(fh)
-
-def load_transports(path):
-    with open(path) as fh:
-        return {k: v for k, v in _json.load(fh).items() if not k.startswith("_")}
-
 _FC_ALLOWED = (1, 2, 3, 4)
 _WO_CODES = {"ABCD": 0, "CDAB": 1}
 _PARITY_CODES = {"NONE": 0, "EVEN": 1, "ODD": 2}
@@ -97,43 +76,7 @@ def _wo_of(r):
     return _WO_CODES.get(str(r.get("word_order", "ABCD")).upper(), 0)
 
 def normalize_model(name):
-    out = "".join(c for c in (name or "").upper() if c.isalnum())
-    return out
-
-def model_registers(models, model_name):
-    want = normalize_model(model_name)
-    for key in sorted(models):
-        if normalize_model(key) == want:
-            return sorted({int(r["register"]) for r in models[key]})
-    return []
-
-def object_id_for(title):
-    out = []
-    for c in title.lower().replace(" ", "_"):
-        if c.isalnum() or c == "_":
-            out.append(c)
-    return "".join(out).strip("_")
-
-def entity_kind_for(addr, by_reg, hints):
-    h = hints.get(str(addr))
-    if h is not None:
-        return h["type"], h.get("options", [])
-    rw = (by_reg.get(str(addr)) or {}).get("mode") == "R/W"
-    return ("number" if rw else "sensor"), []
-
-def validate_selection(addrs, models):
-    seen, clean = set(), []
-    for a in addrs:
-        a = int(a)
-        if a in seen:
-            continue
-        if not is_known(a, models):
-            return None, f"unknown register {a}"
-        seen.add(a)
-        clean.append(a)
-    if len(clean) > MAX_SELECTION:
-        return None, f"too many registers ({len(clean)} > {MAX_SELECTION})"
-    return clean, ""
+    return "".join(c for c in (name or "").upper() if c.isalnum())
 
 def _esc(s):
     return (s or "").replace("\\", "\\\\").replace('"', '\\"')

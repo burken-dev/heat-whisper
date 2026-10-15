@@ -82,21 +82,32 @@ void HeatWhisperComponent::apply_runtime_mode_() {
 // Task 5 deletes the YAML blocks; this table is then the single source.
 static const struct { uint16_t addr; const char *name; } HW_FACTORY_NAMES[] = {
   {40004, "BT1 Outdoor"}, {40013, "Hot Water Top BT7"}, {40014, "Hot Water BT6"},
-  {43005, "Degree Minutes"}, {40033, "Room Temp S1"}, {45001, "Alarm"},
-  {47011, "Heat Offset S1"}, {47041, "Hot Water Comfort Mode"}, {47371, "Allow Heating"},
-  {47370, "Allow Additive Heating"}, {47387, "Hot Water Production"}, {48132, "Temporary Lux"},
+  {40033, "Room Temp S1"}, {43005, "Degree Minutes"}, {45001, "Alarm"},
+  {47011, "Heat Offset S1"}, {47041, "Hot Water Comfort Mode"}, {47370, "Allow Additive Heating"},
+  {47371, "Allow Heating"}, {47387, "Hot Water Production"}, {48132, "Temporary Lux"},
 };
 static const char *base_name_for(uint16_t addr) {
-  for (uint8_t i = 0; i < sizeof(HW_FACTORY_NAMES) / sizeof(HW_FACTORY_NAMES[0]); i++)
-    if (HW_FACTORY_NAMES[i].addr == addr) return HW_FACTORY_NAMES[i].name;
-  return nullptr;
+  const auto n = sizeof(HW_FACTORY_NAMES) / sizeof(HW_FACTORY_NAMES[0]);
+  auto it = std::lower_bound(HW_FACTORY_NAMES, HW_FACTORY_NAMES + n, addr,
+                             [](const decltype(HW_FACTORY_NAMES[0]) &m, uint16_t a) { return m.addr < a; });
+  return (it != HW_FACTORY_NAMES + n && it->addr == addr) ? it->name : nullptr;
 }
 // Codegen-baked entity string indices (dc | uom<<8 packs into App.register_*
 // entity_fields); all zeros = unitless, identical to the old behavior.
 static const HwStr *hw_str_for(uint16_t addr) {
-  for (uint16_t k = 0; k < HW_STRS_N; k++)  // ponytail: linear scan, same as decode loop
-    if (HW_STRS[k].addr == addr) return &HW_STRS[k];
-  return nullptr;
+  auto it = std::lower_bound(HW_STRS, HW_STRS + HW_STRS_N, addr,
+                             [](const HwStr &m, uint16_t a) { return m.addr < a; });
+  return (it != HW_STRS + HW_STRS_N && it->addr == addr) ? it : nullptr;
+}
+static const HwMeta *meta_for(uint16_t addr) {
+  auto it = std::lower_bound(HW_META, HW_META + HW_META_N, addr,
+                             [](const HwMeta &m, uint16_t a) { return m.addr < a; });
+  return (it != HW_META + HW_META_N && it->addr == addr) ? it : nullptr;
+}
+static const HwHint *hint_for(uint16_t addr) {
+  auto it = std::lower_bound(HW_HINTS, HW_HINTS + HW_HINTS_N, addr,
+                             [](const HwHint &m, uint16_t a) { return m.addr < a; });
+  return (it != HW_HINTS + HW_HINTS_N && it->addr == addr) ? it : nullptr;
 }
 // Parse hint opts "raw:label;raw:label" (labels carry \" and \\ escapes from _esc).
 static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector<std::string> *labels) {
@@ -129,9 +140,7 @@ void HeatWhisperComponent::create_entities() {
   std::vector<uint32_t> used_hashes;  // catalog titles collide across models; skip dupes
   for (uint16_t i = 0; i < n; i++) {
     uint16_t addr = addrs[i];
-    const HwMeta *meta = nullptr;
-    for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, same as decode loop
-      if (HW_META[k].addr == addr) { meta = &HW_META[k]; break; }
+    const HwMeta *meta = meta_for(addr);
     if (meta == nullptr) { ESP_LOGW("heatwhisper", "Skipping unknown register %u (map updated after save?)", addr); continue; }
     const char *title = base_name_for(addr);  // post-Task-5 name authority; catalog title otherwise
     if (title == nullptr)
@@ -145,14 +154,11 @@ void HeatWhisperComponent::create_entities() {
     for (uint32_t h : used_hashes)
       if (h == hash) { dupe = true; break; }
     if (dupe) { ESP_LOGW("heatwhisper", "Skipping register %u with duplicate object id", addr); continue; }
-    const HwHint *hint = nullptr;
-    for (uint8_t k = 0; k < HW_HINTS_N; k++)
-      if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
+    const HwHint *hint = hint_for(addr);
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
     if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     if (kind == 0) {
       auto *sen = new HeatWhisperSensor();
-      sen->set_parent(this);
       sen->set_register(addr);
       sen->set_accuracy_decimals(meta->factor >= 100 ? 2 : meta->factor >= 10 ? 1 : 0);
       const HwStr *str = hw_str_for(addr);
@@ -329,9 +335,7 @@ uint8_t HeatWhisperComponent::write_fc_for_model_() const {
 bool HeatWhisperComponent::decode_modbus_(uint16_t addr, const uint16_t *words, uint8_t nwords,
                                           float *out) const {
   if (words == nullptr || out == nullptr || nwords == 0) return false;
-  const HwMeta *reg = nullptr;
-  for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-    if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+  const HwMeta *reg = meta_for(addr);
   if (reg == nullptr) return false;
   bool wide = (reg->size == HW_U32 || reg->size == HW_S32);
   float f = reg->factor ? (float) reg->factor : 1.0f;
@@ -374,9 +378,7 @@ void HeatWhisperComponent::poll_one_() {
   }
   if (!writes_.empty()) {
     auto w = writes_.front();
-    const HwMeta *reg = nullptr;
-    for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-      if (HW_META[k].addr == w.addr) { reg = &HW_META[k]; break; }
+    const HwMeta *reg = meta_for(w.addr);
     bool wide = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32));
     uint8_t fc = write_fc_for_model_();
     if (wide) fc = 16;  // FC06 cannot write 2 regs; MODBUS40 (16) never emits FC06
@@ -394,19 +396,10 @@ void HeatWhisperComponent::poll_one_() {
       tx_(o, 8);
     } else {
       uint32_t u = (uint32_t) w.raw;
-      uint16_t hi = wide ? (uint16_t)(u >> 16) : 0, lo = (uint16_t)(u & 0xFFFF);
+      uint16_t hi = wide ? (uint16_t)(u >> 16) : 0, lo = (uint16_t)(u & 0xFFFF), w0 = wide ? hi : lo;
       uint8_t cnt = wide ? 2 : 1;
       uint8_t o[13] = {modbus_addr_, 16, (uint8_t)(wire >> 8), (uint8_t) wire, 0, cnt, (uint8_t)(2 * cnt),
-                       0, 0, 0, 0, 0, 0};
-      if (!wide) {
-        o[7] = lo >> 8;
-        o[8] = lo & 0xFF;
-      } else {
-        o[7] = hi >> 8;
-        o[8] = hi & 0xFF;
-        o[9] = lo >> 8;
-        o[10] = lo & 0xFF;
-      }
+                       (uint8_t)(w0 >> 8), (uint8_t)(w0 & 0xFF), (uint8_t)(lo >> 8), (uint8_t)(lo & 0xFF), 0, 0};
       size_t n = (size_t) 7 + 2 * cnt;
       uint16_t c = crc16_modbus(o, n);
       o[n] = c & 0xFF;
@@ -421,9 +414,7 @@ void HeatWhisperComponent::poll_one_() {
   }
   if (polled_.empty()) return;
   uint16_t addr = polled_[poll_idx_ % polled_.size()];
-  const HwMeta *reg = nullptr;
-  for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-    if (HW_META[k].addr == addr) { reg = &HW_META[k]; break; }
+  const HwMeta *reg = meta_for(addr);
   uint8_t fc = (reg != nullptr && reg->fc == 4) ? 4 : 3;  // ponytail: FC01/02 read as FC03 until needed
   uint8_t cnt = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32)) ? 2 : 1;
   uint16_t wire = addr - 1;
@@ -487,13 +478,10 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
 void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
   if (f != nullptr && f[2] == kModbus40Addr) modbus40_seen_ = true;
   if (f[2] == kModbus40Addr && f[3] == 0x69 && f[4] == 0x00) {
-    size_t laps = reads_.size();
-    bool sent = false;
-    while (laps-- > 0 && !reads_.empty()) {
+    if (!reads_.empty()) {
       auto r = reads_.front(); reads_.pop();
-      reads_.push(r); tx_(r.data(), r.size()); sent = true; break;
-    }
-    if (!sent) {
+      reads_.push(r); tx_(r.data(), r.size());
+    } else {
       uint8_t empty_poll[4] = {0xC0, 0x69, 0x00, 0xA9};
       tx_(empty_poll, 4);
     }
@@ -516,10 +504,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
     } else {
       for (uint8_t i = 5; i + 3 < n - 1;) {
         uint16_t addr = f[i] | ((uint16_t) f[i + 1] << 8);
-        const HwMeta *reg = nullptr;
-        auto it = std::lower_bound(HW_META, HW_META + HW_META_N, addr,
-                                   [](const HwMeta &m, uint16_t a) { return m.addr < a; });
-        if (it != HW_META + HW_META_N && it->addr == addr) reg = it;
+        const HwMeta *reg = meta_for(addr);
         if (reg == nullptr) { i += 4; continue; }
         bool wide = (reg->size == HW_U32 || reg->size == HW_S32);
         uint8_t need = wide ? (f[3] == 0x68 ? 8 : 6) : 4;
@@ -582,16 +567,14 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
 }
 void HeatWhisperComponent::on_value(uint16_t addr, float v) {
   for (auto *s : sensors_)
-    if (s->get_register() == addr) s->publish_value(v);
+    if (s->get_register() == addr) s->publish_state(v);
   for (auto *n : numbers_)
-    if (n->get_register() == addr) n->publish_value(v);
+    if (n->get_register() == addr) n->publish_state(v);
   for (auto *sw : switches_)
     if (sw->get_register() == addr) sw->publish_state(v != 0);
   for (auto *sel : selects_)
     if (sel->get_register() == addr) {
-      const HwMeta *meta = nullptr;
-      for (uint16_t k = 0; k < HW_META_N; k++)
-        if (HW_META[k].addr == addr) { meta = &HW_META[k]; break; }
+      const HwMeta *meta = meta_for(addr);
       float f = (meta != nullptr && meta->factor) ? (float) meta->factor : 1.0f;
       sel->publish_raw((int32_t) std::lround(v * f));
     }
@@ -625,9 +608,7 @@ void HeatWhisperNumber::control(float value) {
   if (parent_ == nullptr) return;
   float v = value;
   int32_t raw;
-  const HwMeta *reg = nullptr;
-  for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-    if (HW_META[k].addr == addr_) { reg = &HW_META[k]; break; }
+  const HwMeta *reg = meta_for(addr_);
   if (reg != nullptr && reg->factor) {
     raw = (int32_t) std::lround(v * reg->factor);
     if (reg->min != 0 || reg->max != 0) {  // clamp to merged R/W range
@@ -765,7 +746,9 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   uint16_t cn = HW_DEFAULTS_N;
   if (this->parent_->load_selection(&sel)) { cur = sel.addrs; cn = sel.count; }
   static const char *KINDS[] = {"sensor", "number", "switch", "select"};
-  std::string o = "{\"model\":";
+  std::string o;
+  o.reserve((size_t) n * 64 + 256);
+  o += "{\"model\":";
   if (have_model) {
     o += '"';
     picker_esc_(o, model.c_str());
@@ -778,9 +761,7 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   char num[8];
   for (uint16_t i = 0; i < n; i++) {
     uint16_t addr = addrs[i];
-    const HwMeta *meta = nullptr;
-    for (uint16_t k = 0; k < HW_META_N; k++)  // ponytail: linear scan, catalog-wide
-      if (HW_META[k].addr == addr) { meta = &HW_META[k]; break; }
+    const HwMeta *meta = meta_for(addr);
     if (meta == nullptr) continue;
     const HwTitle *te = nullptr;
     const char *title = base_name_for(addr);  // HA-identical display names (Task 3 override table)
@@ -791,9 +772,7 @@ std::string HeatWhisperPickerHandler::list_json_() const {
         break;
       }
     if (title == nullptr) continue;
-    const HwHint *hint = nullptr;
-    for (uint8_t k = 0; k < HW_HINTS_N; k++)
-      if (HW_HINTS[k].addr == addr) { hint = &HW_HINTS[k]; break; }
+    const HwHint *hint = hint_for(addr);
     uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
     if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     bool en = false;
@@ -873,10 +852,7 @@ void HeatWhisperPickerHandler::handle_save_(AsyncWebServerRequest *request) {
     char *end = nullptr;
     long v = strtol(tok.c_str(), &end, 10);
     if (end == tok.c_str() || *end != '\0' || v <= 0 || v > 65535) { err = "bad addr '" + tok + "'"; break; }
-    bool known = false;
-    for (uint16_t k = 0; k < HW_META_N; k++)
-      if (HW_META[k].addr == (uint16_t) v) { known = true; break; }
-    if (!known) { err = "unknown register " + tok; break; }
+    if (!meta_for((uint16_t) v)) { err = "unknown register " + tok; break; }
     bool dupe = false;  // ponytail: repeats must not consume cap slots or persist twice
     for (uint16_t k = 0; k < count; k++)
       if (addrs[k] == (uint16_t) v) { dupe = true; break; }

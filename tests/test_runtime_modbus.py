@@ -58,7 +58,8 @@ def test_picker_ui_has_select_and_detect_with_smart_emphasis():
 
 
 def test_modbus_model_list_comes_from_transports():
-    from components.heatwhisper.registers import load_transports
-    t = load_transports(os.path.join(REPO, "components", "heatwhisper", "transports.json"))
+    import json
+    p = os.path.join(REPO, "components", "heatwhisper", "transports.json")
+    t = {k: v for k, v in json.load(open(p)).items() if not k.startswith("_")}
     assert "F750" in t and "Lambda_EUL" in t
     assert t["Lambda_EUL"]["baud"] == 19200 and t["Lambda_EUL"]["parity"] == "EVEN"
