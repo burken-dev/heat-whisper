@@ -82,7 +82,7 @@ def test_heatwhisper_delegates_to_nibe():
     h = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.h")).read()
     cpp = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")).read()
     assert '#include "nibe.h"' in h or '#include "nibe.h"' in cpp
-    for sym in ("nibe::calc_crc_5c", "nibe::calc_crc_c0", "nibe::encode_poll",
+    for sym in ("nibe::calc_crc_5c", "nibe::encode_poll",
                 "nibe::encode_write", "nibe::parse_model", "nibe::is_writable",
                 "nibe::build_rmu_version"):
         assert sym in (h + cpp), f"heatwhisper must delegate to {sym}"

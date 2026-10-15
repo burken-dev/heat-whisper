@@ -12,6 +12,7 @@
 #include "catalog.h"
 #include "nibe.h"
 #include <queue>
+#include <deque>
 #include <string>
 #include <vector>
 // Firmware identity baked by codegen (git describe); "dev" when unknown.
@@ -26,12 +27,9 @@ struct WriteRequest { uint16_t addr; int32_t raw; };
 class HeatWhisperComponent;  // entities hold a parent pointer only
 class HeatWhisperSensor : public esphome::sensor::Sensor, public esphome::Component {
  public:
-  void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
-  void publish_value(float v) { publish_state(v); }
  protected:
-  HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
 class HeatWhisperNumber : public esphome::number::Number, public esphome::Component {
@@ -39,7 +37,6 @@ class HeatWhisperNumber : public esphome::number::Number, public esphome::Compon
   void set_parent(HeatWhisperComponent *p) { parent_ = p; }
   void set_register(uint16_t a) { addr_ = a; }
   uint16_t get_register() const { return addr_; }
-  void publish_value(float v) { publish_state(v); }
   void control(float value) override;  // clamp to HW_META range, queue_write
  protected:
   HeatWhisperComponent *parent_{nullptr};
@@ -121,10 +118,6 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool is_modbus() const { return modbus_; }
   void loop() override;
   static uint16_t crc16_modbus(const uint8_t *d, size_t n);
-  // kept: thin wrappers over nibe:: so callers/tests don't churn.
-  static uint8_t calc_crc_nibe(const uint8_t *d) { return nibe::calc_crc_5c(d); }
-  // calc_crc_c0_nibe: C0-framed slave frames [C0,CMD,LEN,DATA,CHK], LEN at [2].
-  static uint8_t calc_crc_c0_nibe(const uint8_t *d) { return nibe::calc_crc_c0(d); }
  protected:
   void apply_runtime_mode_();
   void on_frame_(const uint8_t *f, uint8_t n);
@@ -134,7 +127,6 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool decode_modbus_(uint16_t addr, const uint16_t *words, uint8_t nwords, float *out) const;
   void tx_(const uint8_t *d, size_t len);
   void send_ack_() { uint8_t b = 0x06; tx_(&b, 1); }
-  void send_nack_() { uint8_t b = 0x15; tx_(&b, 1); }
   uint8_t modbus_addr_{1};  // Modbus-RTU slave address (transports/YAML); NIBE mode always uses kModbus40Addr
   bool modbus40_seen_{false};  // set on first 0x69/0x6B poll to 0x20
   bool modbus_{false};
@@ -148,8 +140,8 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool pending_{false};
   esphome::GPIOPin *flow_pin_{nullptr};
   std::string model_;
-  std::vector<uint8_t> rx_;
-  std::vector<uint8_t> mrx_;
+  std::deque<uint8_t> rx_;
+  std::deque<uint8_t> mrx_;
   std::queue<WriteRequest> writes_;
   std::queue<std::vector<uint8_t>> reads_;
   std::vector<HeatWhisperSensor *> sensors_;

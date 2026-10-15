@@ -3,7 +3,7 @@ import os, json, subprocess, esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
 from esphome.components import uart, web_server_base
-from .registers import (generate_catalog_header, load_hints, load_transports, MAX_SELECTION,
+from .registers import (generate_catalog_header, MAX_SELECTION,
                          canon_unit, device_class_for_unit)
 CODEOWNERS = ["@andreas"]
 AUTO_LOAD = ["sensor", "number", "switch", "select", "web_server_base"]  # boot factory new entities; no YAML platforms required
@@ -61,9 +61,10 @@ async def to_code(config):
             with open(os.path.join(mdir, f)) as fh:
                 models[f[:-5]] = json.load(fh)
     hints_path = os.path.join(os.path.dirname(__file__), "entity_hints.json")
-    hints = load_hints(hints_path) if os.path.exists(hints_path) else {}
+    hints = json.load(open(hints_path)) if os.path.exists(hints_path) else {}
     transports_path = os.path.join(os.path.dirname(__file__), "transports.json")
-    transports = load_transports(transports_path) if os.path.exists(transports_path) else {}
+    transports = ({k: v for k, v in json.load(open(transports_path)).items() if not k.startswith("_")}
+                  if os.path.exists(transports_path) else {})
     protocol = config["protocol"]
     if protocol == "modbus_rtu":
         if not config["model"] or config["model"] not in transports:
@@ -90,8 +91,16 @@ async def to_code(config):
     if str_idx["dc"]:
         cg.add_define("USE_ENTITY_DEVICE_CLASS")
     catalog_out = os.path.join(os.path.dirname(__file__), "catalog.h")
-    with open(catalog_out, "w") as fh:
-        fh.write(generate_catalog_header(models, hints, transports, str_idx))
+    catalog_src = generate_catalog_header(models, hints, transports, str_idx)
+    try:
+        with open(catalog_out) as fh:
+            if fh.read() == catalog_src:
+                catalog_src = None  # up to date; skip write + rebuild churn
+    except OSError:
+        pass
+    if catalog_src is not None:
+        with open(catalog_out, "w") as fh:
+            fh.write(catalog_src)
     # ponytail: App entity slots are StaticVectors sized from codegen counts and
     # push_back silently drops on overflow; the boot factory new up to
     # MAX_SELECTION entities at runtime, so reserve slots here (also defines
