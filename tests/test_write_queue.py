@@ -191,3 +191,13 @@ def test_heatwhisper_wires_write_queue():
     assert "queue_write(45171, 1, false)" in cpp
     assert "queue_write(45171, 1)" not in cpp
     assert "queue_write(45171, 1, false)" in base
+
+
+def test_poll_one_guards_pop_failed_by_write_fc():
+    cpp = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")).read()
+    poll = cpp.split("void HeatWhisperComponent::poll_one_()")[1].split("void HeatWhisperComponent::on_modbus_frame_")[0]
+    timeout_block = poll.split("if (!writes_.empty()) {")[0]
+    assert "pending_fc_ == 6 || pending_fc_ == 16" in timeout_block
+    assert "writes_.pop_failed()" in timeout_block
+    assert timeout_block.index("pending_fc_ == 6 || pending_fc_ == 16") < timeout_block.index("writes_.pop_failed()")
+    assert "pending_fc_ != 6 && pending_fc_ != 16" in poll

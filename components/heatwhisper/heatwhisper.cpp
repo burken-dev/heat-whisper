@@ -370,13 +370,17 @@ void HeatWhisperComponent::poll_one_() {
     if (++retry_ >= 3) {
       pending_ = false;
       retry_ = 0;
-      if (!writes_.empty()) writes_.pop_failed();  // drop failing write
-      else if (!polled_.empty()) poll_idx_++;
+      if (pending_fc_ == 6 || pending_fc_ == 16) {
+        if (!writes_.empty()) writes_.pop_failed();  // drop failing write
+      } else if (!polled_.empty()) {
+        poll_idx_++;
+      }
     } else {
       pending_ = false;  // retry same target below
     }
   }
   if (!writes_.empty()) {
+    if (pending_fc_ != 6 && pending_fc_ != 16) retry_ = 0;  // fresh budget after read timeout
     auto w = writes_.front();
     const HwMeta *reg = meta_for(w.addr);
     bool wide = (reg != nullptr && (reg->size == HW_U32 || reg->size == HW_S32));
