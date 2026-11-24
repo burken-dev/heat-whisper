@@ -221,7 +221,7 @@ void HeatWhisperComponent::setup() {
   apply_runtime_mode_();
   create_entities();
   if (!modbus_) {
-    queue_write(45171, 1);  // Reset startup alarm (matches NibePi sendQueue)
+    queue_write(45171, 1, false);  // Reset startup alarm (matches NibePi sendQueue)
   }
 }
 static std::string hw_hex(const uint8_t *d, size_t n) {
@@ -370,7 +370,7 @@ void HeatWhisperComponent::poll_one_() {
     if (++retry_ >= 3) {
       pending_ = false;
       retry_ = 0;
-      if (!writes_.empty()) writes_.pop();  // drop failing write
+      if (!writes_.empty()) writes_.pop_failed();  // drop failing write
       else if (!polled_.empty()) poll_idx_++;
     } else {
       pending_ = false;  // retry same target below
@@ -436,7 +436,7 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
       retry_ = 0;
       pending_ = false;
       if (pending_fc_ == 6 || pending_fc_ == 16) {
-        if (!writes_.empty()) writes_.pop();
+        if (!writes_.empty()) writes_.pop_failed();
       } else if (!polled_.empty()) {
         poll_idx_++;
       } else {
@@ -470,7 +470,7 @@ void HeatWhisperComponent::on_modbus_frame_(const uint8_t *f, size_t n) {
     if (crc16_modbus(f, n - 2) != (uint16_t)(f[n - 2] | (f[n - 1] << 8))) { fail_(); return; }
     uint16_t wire = pending_addr_ - 1;
     if (f[2] != (wire >> 8) || f[3] != (wire & 0xFF)) { fail_(); return; }
-    if (!writes_.empty()) writes_.pop();
+    if (!writes_.empty()) writes_.pop_sent();
     pending_ = false;
     retry_ = 0;
   }
@@ -488,7 +488,7 @@ void HeatWhisperComponent::on_frame_(const uint8_t *f, uint8_t n) {
   } else if (f[2] == kModbus40Addr && f[3] == 0x6B && f[4] == 0x00) {
     modbus40_seen_ = true;
     if (!writes_.empty()) {
-      auto w = writes_.front(); writes_.pop();
+      auto w = writes_.front(); writes_.pop_sent();
       uint8_t o[10];
       nibe::encode_write(w.addr, w.raw, o);
       tx_(o, 10);
@@ -566,6 +566,9 @@ void HeatWhisperComponent::ensure_polled(uint16_t addr) {
   reads_.emplace(o, o + 6);
 }
 void HeatWhisperComponent::on_value(uint16_t addr, float v) {
+  const HwMeta *meta = meta_for(addr);
+  float f = (meta != nullptr && meta->factor) ? (float) meta->factor : 1.0f;
+  writes_.record_known(addr, (int32_t) std::lround(v * f));
   for (auto *s : sensors_)
     if (s->get_register() == addr) s->publish_state(v);
   for (auto *n : numbers_)
@@ -573,11 +576,7 @@ void HeatWhisperComponent::on_value(uint16_t addr, float v) {
   for (auto *sw : switches_)
     if (sw->get_register() == addr) sw->publish_state(v != 0);
   for (auto *sel : selects_)
-    if (sel->get_register() == addr) {
-      const HwMeta *meta = meta_for(addr);
-      float f = (meta != nullptr && meta->factor) ? (float) meta->factor : 1.0f;
-      sel->publish_raw((int32_t) std::lround(v * f));
-    }
+    if (sel->get_register() == addr) sel->publish_raw((int32_t) std::lround(v * f));
 }
 void HeatWhisperSelect::set_labels(const std::vector<std::string> &labels) {
   labels_ = labels;  // ponytail: fill before set_options; realloc would dangle traits pointers
@@ -704,7 +703,7 @@ void HeatWhisperPickerHandler::handleRequest(AsyncWebServerRequest *request) {
     const auto &url = request->url();
 #endif
     if (url == ESPHOME_F("/heatwhisper/reset_alarm")) {
-      this->parent_->queue_write(45171, 1);
+      this->parent_->queue_write(45171, 1, false);
       request->send(200, "text/plain", "alarm reset queued");
       return;
     }

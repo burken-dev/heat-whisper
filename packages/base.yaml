@@ -48,7 +48,7 @@ button:
     icon: "mdi:alarm-check"
     entity_category: config
     on_press:
-      - lambda: 'id(heatwhisper_bridge).queue_write(45171, 1);'
+      - lambda: 'id(heatwhisper_bridge).queue_write(45171, 1, false);'
 
 # HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
 heatwhisper:

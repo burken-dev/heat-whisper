@@ -76,12 +76,14 @@ def test_0x62_decoded():
 
 def test_rmu_write_guard():
     nibe = open(os.path.join(REPO, "components", "heatwhisper", "nibe.h")).read()
-    assert "nibe::is_writable" in HDR  # I2: RMU 1xxxx dropped from 0x6B slot via seam
+    wq = open(os.path.join(REPO, "components", "heatwhisper", "write_queue.h")).read()
+    assert '#include "write_queue.h"' in HDR and "nibe::is_writable" in wq  # I2: RMU 1xxxx dropped from 0x6B slot via seam
     assert "20000" in nibe
 
 
 def test_write_queue_capped():
-    assert "writes_.size() >= 4" in HDR  # I5
+    wq = open(os.path.join(REPO, "components", "heatwhisper", "write_queue.h")).read()
+    assert "kMaxPending = 4" in wq and "WriteQueue writes_" in HDR  # I5
 
 
 def test_rx_resync():

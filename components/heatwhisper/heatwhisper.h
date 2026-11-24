@@ -11,6 +11,7 @@
 #include "esphome/core/application.h"
 #include "catalog.h"
 #include "nibe.h"
+#include "write_queue.h"
 #include <queue>
 #include <deque>
 #include <string>
@@ -23,7 +24,6 @@
 namespace esphome {
 namespace heatwhisper {
 enum HwSize : uint8_t { HW_U8 = 0, HW_S8, HW_U16, HW_S16, HW_U32, HW_S32 };
-struct WriteRequest { uint16_t addr; int32_t raw; };
 class HeatWhisperComponent;  // entities hold a parent pointer only
 class HeatWhisperSensor : public esphome::sensor::Sensor, public esphome::Component {
  public:
@@ -98,10 +98,19 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void setup() override;
   void set_poll_registers(const std::vector<uint16_t> &addrs);
   void ensure_polled(uint16_t addr);
-  void queue_write(uint16_t addr, int32_t raw) {
-    if (!nibe::is_writable(addr)) { ESP_LOGW("heatwhisper", "Dropping sub-20000 write addr %u", addr); return; }
-    if (writes_.size() >= 4) { ESP_LOGW("heatwhisper", "Write queue full, dropping oldest"); writes_.pop(); }
-    writes_.push({addr, raw});
+  void queue_write(uint16_t addr, int32_t raw, bool dedupe = true) {
+    auto res = writes_.enqueue(addr, raw, dedupe, is_modbus_write_in_flight_());
+    if (res == QueueResult::DROPPED_UNWRITABLE) {
+      ESP_LOGW("heatwhisper", "Dropping sub-20000 write addr %u", addr);
+    } else if (res == QueueResult::EVICTED_OLDEST) {
+      ESP_LOGW("heatwhisper", "Write queue full, dropping oldest");
+    } else if (res == QueueResult::SKIPPED_NOOP || res == QueueResult::SKIPPED_DUPE) {
+      ESP_LOGD("heatwhisper", "Skipping no-op write addr %u (already %d)", addr, (int) raw);
+    } else if (res == QueueResult::CANCELLED) {
+      ESP_LOGD("heatwhisper", "Cancelled pending write addr %u (reverted to %d)", addr, (int) raw);
+    } else if (res == QueueResult::COALESCED) {
+      ESP_LOGD("heatwhisper", "Coalesced pending write addr %u -> %d", addr, (int) raw);
+    }
   }
   void add_sensor(HeatWhisperSensor *s) { sensors_.push_back(s); ensure_polled(s->get_register()); }
   void add_number(HeatWhisperNumber *n) { numbers_.push_back(n); ensure_polled(n->get_register()); }
@@ -127,6 +136,9 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   bool decode_modbus_(uint16_t addr, const uint16_t *words, uint8_t nwords, float *out) const;
   void tx_(const uint8_t *d, size_t len);
   void send_ack_() { uint8_t b = 0x06; tx_(&b, 1); }
+  bool is_modbus_write_in_flight_() const {
+    return modbus_ && pending_ && (pending_fc_ == 6 || pending_fc_ == 16);
+  }
   uint8_t modbus_addr_{1};  // Modbus-RTU slave address (transports/YAML); NIBE mode always uses kModbus40Addr
   bool modbus40_seen_{false};  // set on first 0x69/0x6B poll to 0x20
   bool modbus_{false};
@@ -142,7 +154,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   std::string model_;
   std::deque<uint8_t> rx_;
   std::deque<uint8_t> mrx_;
-  std::queue<WriteRequest> writes_;
+  WriteQueue writes_;
   std::queue<std::vector<uint8_t>> reads_;
   std::vector<HeatWhisperSensor *> sensors_;
   std::vector<HeatWhisperNumber *> numbers_;

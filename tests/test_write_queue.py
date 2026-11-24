@@ -170,3 +170,24 @@ def test_write_queue_header_has_no_esphome_deps():
     src = open(WQ_H).read()
     for bad in ("UARTDevice", "ESP_LOG", "App.", "Component.h", "uart/uart.h"):
         assert bad not in src, f"write_queue.h must stay host-compilable, found {bad}"
+
+
+def test_heatwhisper_wires_write_queue():
+    h = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.h")).read()
+    cpp = open(os.path.join(REPO, "components", "heatwhisper", "heatwhisper.cpp")).read()
+    base = open(os.path.join(REPO, "packages", "base.yaml")).read()
+    assert '#include "write_queue.h"' in h
+    assert "WriteQueue writes_;" in h
+    assert "bool dedupe = true" in h
+    assert "writes_.enqueue(" in h
+    # on_value records pump readbacks for no-op dedupe
+    on_val = cpp.split("void HeatWhisperComponent::on_value")[1].split("void HeatWhisperSelect::set_labels")[0]
+    assert "writes_.record_known(" in on_val
+    # TX paths use pop_sent on success and pop_failed on retry exhaustion
+    assert "writes_.pop_sent()" in cpp
+    assert "writes_.pop_failed()" in cpp
+    assert "writes_.pop()" not in cpp
+    # One-shot alarm reset (45171) bypasses dedupe everywhere
+    assert "queue_write(45171, 1, false)" in cpp
+    assert "queue_write(45171, 1)" not in cpp
+    assert "queue_write(45171, 1, false)" in base
