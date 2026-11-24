@@ -24,8 +24,9 @@ def test_number_control_still_queues_when_disabled():
     body = CPP.split("HeatWhisperNumber::control")[1].split("}  // namespace")[0]
     assert "queue_write" in body
     assert "disabled_" not in body and "is_enabled" not in body
-OLD_ENTITY_REGS = (40004, 40013, 40014, 43005,
-                   40033, 45001, 47011, 47041, 47371, 47370, 47387, 48132)
+OLD_ENTITY_REGS = (40004, 40008, 40012, 40013, 40014, 40033,
+                   43005, 43009, 43084, 43086, 45001,
+                   47011, 47041, 47370, 47371, 47387, 48132)
 
 def _base_text():
     return open(os.path.join(os.path.dirname(__file__), "..", "packages", "base.yaml")).read()
@@ -49,17 +50,22 @@ def test_base_yaml_has_no_static_entities():
     assert "picked at runtime" in base
 
 def test_factory_covers_old_entity_set():
-    # Factory defaults must cover exactly the old static entity set, with
-    # the old base.yaml names, so HA entity ids carry over.
+    # Factory defaults must cover the optimizer-ready 17-register set in
+    # ascending address order (required by std::lower_bound in base_name_for).
     from components.heatwhisper.registers import DEFAULT_ENABLED
     table = _base_names_table()
+    assert list(table.keys()) == sorted(table.keys())
     assert sorted(table) == sorted(OLD_ENTITY_REGS)
     assert sorted(table) == sorted(DEFAULT_ENABLED)
     assert len(set(table.values())) == len(table)
-    # ponytail: hardcoded snapshot of the 12 factory names; catches silent renames.
-    EXPECTED_BASE_NAMES = ["BT1 Outdoor",
-        "Hot Water Top BT7", "Hot Water BT6",
-        "Room Temp S1", "Degree Minutes", "Heat Offset S1",
-        "Alarm", "Hot Water Comfort Mode", "Allow Heating",
-        "Allow Additive Heating", "Hot Water Production", "Temporary Lux"]
+    # ponytail: hardcoded snapshot of the 17 factory names; catches silent renames.
+    EXPECTED_BASE_NAMES = [
+        "BT1 Outdoor", "Supply Temp S1", "Return Temp",
+        "Hot Water Top BT7", "Hot Water BT6", "Room Temp S1",
+        "Degree Minutes", "Calculated Supply",
+        "Electrical Addition Power", "Operating Priority", "Alarm",
+        "Heat Offset S1", "Hot Water Comfort Mode",
+        "Allow Additive Heating", "Allow Heating",
+        "Hot Water Production", "Temporary Lux",
+    ]
     assert sorted(table.values()) == sorted(EXPECTED_BASE_NAMES)

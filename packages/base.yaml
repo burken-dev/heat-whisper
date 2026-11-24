@@ -48,7 +48,7 @@ button:
     icon: "mdi:alarm-check"
     entity_category: config
     on_press:
-      - lambda: 'id(heatwhisper_bridge).queue_write(45171, 1);'
+      - lambda: 'id(heatwhisper_bridge).queue_write(45171, 1, false);'
 
 # HeatWhisper. Native API is primary; MQTT is opt-in only (see bottom).
 heatwhisper:
@@ -57,7 +57,7 @@ heatwhisper:
   # Registers are picked at runtime: open http://<node>/heatwhisper/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
-  # 18 entities; stored in flash, survives OTA.
+  # 17 entities; stored in flash, survives OTA.
   # First boot: flash once, wire to pump, done. The pump model is autodetected
   # from its announcement — no model setting needed.
   # Pump menu 5.2 (service menu, hold Back 7s): Modbus ON, all RMU systems OFF.

@@ -2,9 +2,21 @@
 
 Heat Whisper is a software that lets you read and control your heat pump locally. The main focus is to integrate Nibe heatpumps from the F-series to Home Assistant. It is possible to configure Heat Whisper to communicate over MQTT to support other systems apart from Home Assistant.
 
-This project doens't include any logic for smart control itself, the purpose is instead to expose any supported register to be read or written to by the smart home system of your choice. If you are running e.g. Home Assistant you can set up your control logic based on electricity prices, weather forcast, solar production and whatever you like.
+This project doesn't include any logic for smart control itself, the purpose is instead to expose any supported register to be read or written to by the smart home system of your choice. If you are running e.g. Home Assistant you can set up your control logic based on electricity prices, weather forecast, solar production and whatever you like.
 
 The project is based on ESPHome and emulates Nibe's own Modbus 40-unit by communicating with the heat pump over RS485.
+
+## Works with
+
+HeatWhisper is a zero-logic local bridge designed to plug directly into external energy optimizers and smart home platforms:
+
+- **Home Assistant** — Native ESPHome API with zero-config discovery and unified `heat-whisper` / `HeatWhisper` naming across all boards.
+- **EnergyWizard** — Ready out of the box with the 17 default entities (set `curve_offset: number.heatwhisper_heat_offset_s1`, plus outdoor, supply, return, room, and hot-water sensors).
+- **EffektGuard** — Works directly against the default outdoor, supply, return, room, degree-minute, electrical-addition, priority, and offset entities.
+- **EMHASS** — Expose temperature/power sensors and automate heat offset, hot water comfort mode, or additive heating schedules.
+- **MQTT / Node-RED** — Opt-in MQTT broker support in `packages/base.yaml` with automatic Home Assistant discovery and per-entity state topics.
+
+**EEPROM protection:** HeatWhisper deduplicates no-op writes (comparing against the pump's last known register state) and coalesces rapid pending updates in firmware, protecting your NIBE EEPROM when external optimizers resend identical setpoints on 1–5 minute loops.
 
 You can support the project by:
 * Joining as a developer
@@ -86,7 +98,7 @@ Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the
 
 Settings → Devices & Services → ESPHome — the node appears automatically (no API key on factory image). Click Add. The pump model is autodetected from its announcement (`Heat Pump Model` sensor, empty until first heard) — no model setting, no Modbus vs NIBE choice for NIBE pumps.
 
-**Caveat:** Don't get greedy with settings and changing them too often! Think hours instead of minutes when creating your logic to not wear out the EEPROM in the Nibe.
+**Caveat:** Don't get greedy with settings and changing them to new values too often! Think hours instead of minutes when creating your logic to not wear out the EEPROM in the Nibe. (Repeated identical writes are automatically deduplicated in firmware.)
 
 ### 4. Pick registers
 
@@ -105,21 +117,47 @@ Adopt in the ESPHome dashboard (`dashboard_import` is built in), then add `api` 
 
 - No values? Check A/B wiring (try swapping), confirm decoded temps at `http://<node>`, then re-check the pump port.
 
-## Default entities
+## Entity & Register Reference
 
-Created at first boot (12 registers):
+All three board configs (`heatwhisper_esp32.yaml`, `heatwhisper_esp32_s3_rs485.yaml`, `heatwhisper_pico_w.yaml`) share `name: heat-whisper` and `friendly_name: HeatWhisper`, so Home Assistant entity IDs and the `heat-whisper.local` mDNS hostname are identical on every supported board.
 
-Sensors: 40004 BT1 Outdoor, 40013 Hot Water Top BT7, 40014 Hot Water BT6, 40033 Room S1, 45001 Alarm.
+> **Upgrading from an older ESP32-S3 or Pico W build?** Earlier releases used `heat-whisper-s3` / `heat-whisper-pico`. After updating, the mDNS hostname unifies to `heat-whisper.local`; existing Home Assistant entity IDs already stored in Home Assistant's entity registry remain intact.
 
-Numbers (writable): 43005 Degree Minutes (-3000…3000), 47011 Heat Offset S1 (-10…10).
+Created at first boot (**17 registers**; stored in NVS flash, survives OTA — devices that already saved a custom selection keep theirs):
 
-Select: 47041 HW Comfort (Eco, Normal, Luxury, Smart = raw 0, 1, 2, 4), 48132 Temporary Lux (Off, 3h, 6h, 12h, One time = raw 0, 1, 2, 3, 4).
+| Register | HA Entity ID | Type / Unit | Values / Notes |
+|---|---|---|---|
+| `40004` | `sensor.heatwhisper_bt1_outdoor` | `sensor` (`°C`) | BT1 outdoor temperature (0.1 °C) |
+| `40008` | `sensor.heatwhisper_supply_temp_s1` | `sensor` (`°C`) | Supply temperature, climate system 1 (0.1 °C) |
+| `40012` | `sensor.heatwhisper_return_temp` | `sensor` (`°C`) | Return temperature (0.1 °C) |
+| `40013` | `sensor.heatwhisper_hot_water_top_bt7` | `sensor` (`°C`) | Hot water top temperature BT7 (0.1 °C) |
+| `40014` | `sensor.heatwhisper_hot_water_bt6` | `sensor` (`°C`) | Hot water load temperature BT6 (0.1 °C) |
+| `40033` | `sensor.heatwhisper_room_temp_s1` | `sensor` (`°C`) | Room temperature BT50, climate system 1 (0.1 °C) |
+| `43005` | `number.heatwhisper_degree_minutes` | `number` | Degree minutes (`-3000`…`3000`, step `0.1`, R/W) |
+| `43009` | `sensor.heatwhisper_calculated_supply` | `sensor` (`°C`) | Calculated supply temperature, S1 (0.1 °C) |
+| `43084` | `sensor.heatwhisper_electrical_addition_power` | `sensor` (`kW`) | Internal electrical addition power (0.01 kW) |
+| `43086` | `sensor.heatwhisper_operating_priority` | `sensor` | Operating priority code: `10`=Off, `20`=Hot Water, `30`=Heat, `40`=Pool, `41`=Pool 2, `50`=Transfer, `60`=Cooling |
+| `45001` | `sensor.heatwhisper_alarm` | `sensor` | Active alarm code (`0` = no alarm) |
+| `47011` | `number.heatwhisper_heat_offset_s1` | `number` | Heat curve offset S1 (`-10`…`10`, step `1`, R/W) |
+| `47041` | `select.heatwhisper_hot_water_comfort_mode` | `select` | `Eco` (`0`), `Normal` (`1`), `Luxury` (`2`), `Smart` (`4`) |
+| `47370` | `switch.heatwhisper_allow_additive_heating` | `switch` | Allow additive heating (`0`/`1`) |
+| `47371` | `switch.heatwhisper_allow_heating` | `switch` | Allow heating (`0`/`1`) |
+| `47387` | `switch.heatwhisper_hot_water_production` | `switch` | Hot water production (`0`/`1`) |
+| `48132` | `select.heatwhisper_temporary_lux` | `select` | `Off` (`0`), `3h` (`1`), `6h` (`2`), `12h` (`3`), `One time` (`4`) |
 
-Switches: 47371 Allow Heating, 47370 Allow Additive, 47387 HW Production (all 0/1).
+### Built-in device entities
 
-Plus a diagnostic `Heat Pump Model` text sensor (empty until the pump's first announcement is heard).
+| Name | HA Entity ID | Kind | Notes |
+|---|---|---|---|
+| `Heat Pump Model` | `sensor.heatwhisper_heat_pump_model` | diagnostic `text_sensor` | Autodetected from pump `0x6D` announcement (empty until heard) |
+| `HeatWhisper version` | `sensor.heatwhisper_heatwhisper_version` | diagnostic `text_sensor` | Firmware release tag (or `"dev"` for local builds) |
+| `Log Level` | `select.heatwhisper_log_level` | config `select` | Runtime ESPHome log level |
+| `Restart HeatWhisper` | `button.heatwhisper_restart_heatwhisper` | config `button` | Reboots the bridge |
+| `Factory Reset HeatWhisper WiFi` | `button.heatwhisper_factory_reset_heatwhisper_wifi` | config `button` | Clears Wi-Fi credentials and starts fallback AP |
+| `Reset Heat Pump Alarm` | `button.heatwhisper_reset_heat_pump_alarm` | config `button` | Writes `1` to register `45171` (always sent, not deduplicated) |
+| `Firmware Update` | `update.heatwhisper_firmware_update` | `update` | Managed OTA from release manifest (ESP32 & ESP32-S3 only; Pico W uses manual `.uf2`) |
 
-Smart-control recipe: cheap/solar surplus → raise 47011 (+2…+3) and set 47041=2, ensure 47371/47370=1; expensive → lower 47011, set 47041=0, set 47370=0. Prefer 47011 over raw 43005 writes.
+Smart-control recipe: cheap/solar surplus → raise `47011` (`+2`…`+3`) and set `47041` = `Luxury`, ensure `47371`/`47370` = ON; expensive → lower `47011`, set `47041` = `Eco`, set `47370` = OFF. Prefer `number.heatwhisper_heat_offset_s1` (`47011`) over raw `43005` writes.
 
 ## Configuration
 
@@ -157,7 +195,9 @@ pip install -r requirements.txt   # pinned ESPHome (same version CI uses)
 python -m pytest tests/ -v
 esphome config heatwhisper_esp32.yaml
 esphome config heatwhisper_esp32_s3_rs485.yaml
+esphome config heatwhisper_pico_w.yaml
 esphome compile heatwhisper_esp32.yaml
+# clear .esphome/build/heat-whisper between different boards (all share name: heat-whisper)
 esphome compile heatwhisper_esp32_s3_rs485.yaml
 esphome compile heatwhisper_pico_w.yaml
 ```
@@ -171,7 +211,7 @@ CI (`.github/workflows/build.yml`): pytest → `esphome config` + `compile` all 
 - No values? Check wiring (try swapping A/B), check logs / `web_server` :80 (switch Log Level to DEBUG), confirm the pump port is enabled.
 - Writes ignored for addr < 20000: dropped by design, never sent.
 - `Heat Pump Model` empty: pump hasn't sent its announcement yet — wait a minute.
-- Wi-Fi wrong? Hold out, or press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
+- Wi-Fi wrong? Wait for the fallback AP, press Factory Reset Wi-Fi (`button`), or re-run Improv; fallback AP is `HeatWhisper` / `heatwhisper01`.
 
 ## Thanks to
 This project is inspired by [NibePi](https://github.com/anerdins/nibepi). Big thanks for the register mappings and such!

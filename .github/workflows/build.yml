@@ -33,18 +33,20 @@ jobs:
           esphome "${ARGS[@]}" config heatwhisper_esp32.yaml
           esphome "${ARGS[@]}" config heatwhisper_pico_w.yaml
           esphome "${ARGS[@]}" config heatwhisper_esp32_s3_rs485.yaml
-          esphome "${ARGS[@]}" compile heatwhisper_esp32.yaml
-          esphome "${ARGS[@]}" compile heatwhisper_pico_w.yaml
-          esphome "${ARGS[@]}" compile heatwhisper_esp32_s3_rs485.yaml
-      - run: |
           mkdir -p fw
+          esphome "${ARGS[@]}" compile heatwhisper_esp32.yaml
           cp .esphome/build/heat-whisper/build/firmware.factory.bin fw/
           cp .esphome/build/heat-whisper/build/firmware.ota.bin fw/
-          cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.bin fw/
-          cp .esphome/build/heat-whisper-pico/.pioenvs/heat-whisper-pico/firmware.uf2 fw/
-      - run: |
-          cp .esphome/build/heat-whisper-s3/build/firmware.factory.bin fw/heatwhisper_esp32_s3_rs485.factory.bin
-          cp .esphome/build/heat-whisper-s3/build/firmware.ota.bin fw/heatwhisper_esp32_s3_rs485.ota.bin
+          rm -rf .esphome/build/heat-whisper
+
+          esphome "${ARGS[@]}" compile heatwhisper_pico_w.yaml
+          cp .esphome/build/heat-whisper/.pioenvs/heat-whisper/firmware.bin fw/
+          cp .esphome/build/heat-whisper/.pioenvs/heat-whisper/firmware.uf2 fw/
+          rm -rf .esphome/build/heat-whisper
+
+          esphome "${ARGS[@]}" compile heatwhisper_esp32_s3_rs485.yaml
+          cp .esphome/build/heat-whisper/build/firmware.factory.bin fw/heatwhisper_esp32_s3_rs485.factory.bin
+          cp .esphome/build/heat-whisper/build/firmware.ota.bin fw/heatwhisper_esp32_s3_rs485.ota.bin
       - uses: actions/upload-artifact@v7
         with:
           name: firmware

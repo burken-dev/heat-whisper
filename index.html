@@ -16,7 +16,7 @@
 <li><b>Connect the pump:</b> wire pump A/B to the onboard screw terminals, power up. The bridge autodetects the NIBE model from its announcement — no model setting, no Modbus vs NIBE choice.</li>
 <li><b>Pump menu 5.2</b> (service menu, hold Back 7s): <code>Modbus ON</code> (required for F-series telemetry & auto-detection). Leave all RMU systems OFF — the bridge emulates MODBUS40 (0x20). Check <code>http://&lt;node&gt;/heatwhisper/registers</code> for live model detection.</li>
 <li><b>Home Assistant:</b> Settings → Devices &amp; Services → ESPHome — the node appears automatically (no API key on factory image). Click Add.</li>
-<li><b>Pick registers (optional):</b> open <code>http://&lt;node&gt;/heatwhisper/registers</code>, check what to expose (18 defaults, max 50), save, reboot.</li>
+<li><b>Pick registers (optional):</b> open <code>http://&lt;node&gt;/heatwhisper/registers</code>, check what to expose (17 defaults, max 50), save, reboot.</li>
 </ol>
 <esp-web-install-button manifest="./manifest.json"></esp-web-install-button>
 <h2>Pico W (no WebSerial — RP2040 not supported by ESP Web Tools)</h2>

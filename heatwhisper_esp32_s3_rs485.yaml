@@ -1,8 +1,8 @@
 substitutions:
   ota_manifest_url: https://burken-dev.github.io/heat-whisper/manifest.json
 esphome:
-  name: heat-whisper-s3
-  friendly_name: HeatWhisper S3
+  name: heat-whisper
+  friendly_name: HeatWhisper
 dashboard_import:
   package_import_url: github://burken-dev/heat-whisper/heatwhisper_esp32_s3_rs485.yaml@main
 packages:
