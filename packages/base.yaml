@@ -57,7 +57,7 @@ heatwhisper:
   # Registers are picked at runtime: open http://<node>/heatwhisper/registers,
   # check what to expose (max 50), save, reboot. Entity types auto-inferred
   # (R→sensor, R/W→number, curated switches/selects). Factory defaults =
-  # 18 entities; stored in flash, survives OTA.
+  # 17 entities; stored in flash, survives OTA.
   # First boot: flash once, wire to pump, done. The pump model is autodetected
   # from its announcement — no model setting needed.
   # Pump menu 5.2 (service menu, hold Back 7s): Modbus ON, all RMU systems OFF.
