@@ -105,6 +105,8 @@ Settings → Devices & Services → ESPHome — the node appears automatically (
 1. Open `http://<node>/heatwhisper/registers`, check what to expose (max 50), save, reboot (via the ESPHome restart button).
 2. The selection is stored in flash and survives OTA. Fewer registers = faster poll cycle, so enable only what you need.
 
+Registers are categorized into four safety tiers (`Read-only`, `Control`, `Installer`, and `High Risk`). `Installer` and `High Risk` registers are hidden behind an opt-in checkbox by default (unless already enabled or matched by an exact 4–5 digit register search), and enabling any writable `Installer`, `High Risk`, or unclamped (`No range`) register shows one summary confirmation on Save. Any `R/W` register can also be toggled to **Read-only (sensor)** in the picker so you can monitor it in Home Assistant without exposing write controls; registers missing catalog `min`/`max` bounds default to Read-only and fall back to integer type bounds if explicitly made writable.
+
 The page also holds the other runtime settings (all saved to flash, reboot to apply): NIBE model pin / Autodetect (pins the catalog filter until the next pump announcement overwrites it), Modbus-RTU setup (see below), and a `Reset pump alarm` button (writes 1 to 45171 — NIBE models only).
 
 Done — sensors appear in Home Assistant and writable registers appear as numbers/switches/selects.
