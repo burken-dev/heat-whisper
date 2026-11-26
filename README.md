@@ -10,11 +10,11 @@ The project is based on ESPHome and emulates Nibe's own Modbus 40-unit by commun
 
 HeatWhisper is a zero-logic local bridge designed to plug directly into external energy optimizers and smart home platforms:
 
-- **Home Assistant** — Native ESPHome API with zero-config discovery.
-- **EnergyWizard** — Ready out of the box with the 17 default entities (set `curve_offset: number.heatwhisper_heat_offset_s1`, plus outdoor, supply, return, room, and hot-water sensors).
-- **EffektGuard** — Works directly against the default outdoor, supply, return, room, degree-minute, electrical-addition, priority, and offset entities.
-- **EMHASS** — Expose temperature/power sensors and automate heat offset, hot water comfort mode, or additive heating schedules.
-- **MQTT / Node-RED** — Opt-in MQTT broker support in `packages/base.yaml` with automatic Home Assistant discovery and per-entity state topics.
+- **[Home Assistant](https://www.home-assistant.io/)** — Native [ESPHome](https://esphome.io/) API with zero-config discovery.
+- **[EnergyWizard](https://github.com/murre87/energywizard)** — Ready out of the box with the 17 default entities (set `curve_offset: number.heatwhisper_heat_offset_s1`, plus outdoor, supply, return, room, and hot-water sensors).
+- **[EffektGuard](https://github.com/enoch85/EffektGuard)** — Works directly against the default outdoor, supply, return, room, degree-minute, electrical-addition, priority, and offset entities.
+- **[EMHASS](https://github.com/davidusb-geek/emhass)** — Expose temperature/power sensors and automate heat offset, hot water comfort mode, or additive heating schedules.
+- **[MQTT](https://mqtt.org/) / [Node-RED](https://nodered.org/)** — Opt-in MQTT broker support in `packages/base.yaml` with automatic Home Assistant discovery and per-entity state topics.
 
 **EEPROM protection:** HeatWhisper deduplicates no-op writes (comparing against the pump's last known register state) and coalesces rapid pending updates in firmware, protecting your NIBE EEPROM when external optimizers resend identical setpoints on 1–5 minute loops.
 
