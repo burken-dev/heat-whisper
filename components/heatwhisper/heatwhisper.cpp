@@ -13,19 +13,35 @@
 namespace esphome {
 namespace heatwhisper {
 static float scale(int32_t raw, int16_t f) { return f ? (float) raw / f : (float) raw; }
-static const uint32_t HW_SEL_TYPE = 0x6E696273UL;  // keep: saved selections survive OTA
+static const uint32_t HW_SEL_TYPE = 0x6E696273UL;     // v1 legacy (108B): read fallback for OTA migration
+static const uint32_t HW_SEL_V2_TYPE = 0x6E696274UL;  // v2 (116B): includes per-slot ro_mask
+static const HwMeta *meta_for(uint16_t addr);
+static const HwHint *hint_for(uint16_t addr);
 bool HeatWhisperComponent::load_selection(HeatWhisperSelection *out) {
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperSelection>(HW_SEL_TYPE, true);
-  if (!pref.load(out) || out->version != 1 || out->count > HW_MAX_SELECTION) return false;
-  return true;
+  if (out == nullptr) return false;
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperSelection>(HW_SEL_V2_TYPE, true);
+  if (pref.load(out) && out->version == 2 && out->count <= HW_MAX_SELECTION) return true;
+  HeatWhisperSelectionV1 v1{};
+  ESPPreferenceObject v1_pref = global_preferences->make_preference<HeatWhisperSelectionV1>(HW_SEL_TYPE, true);
+  if (v1_pref.load(&v1) && v1.version == 1 && v1.count <= HW_MAX_SELECTION) {
+    safety::migrate_v1_to_v2(v1, out, [](uint16_t addr) {
+      const HwMeta *m = meta_for(addr);
+      if (m == nullptr) return false;
+      const HwHint *h = hint_for(addr);
+      return safety::is_unclamped(addr, m->rw, m->min, m->max, h != nullptr ? (int8_t) h->kind : -1);
+    });
+    return true;
+  }
+  return false;
 }
-bool HeatWhisperComponent::save_selection(const uint16_t *addrs, uint16_t n) {
+bool HeatWhisperComponent::save_selection(const uint16_t *addrs, uint16_t n, uint64_t ro_mask) {
   if (n > HW_MAX_SELECTION) return false;
   HeatWhisperSelection s{};
-  s.version = 1;
+  s.version = 2;
   s.count = n;
+  s.set_ro_mask(ro_mask);
   if (n) memcpy(s.addrs, addrs, n * sizeof(uint16_t));
-  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperSelection>(HW_SEL_TYPE, true);
+  ESPPreferenceObject pref = global_preferences->make_preference<HeatWhisperSelection>(HW_SEL_V2_TYPE, true);
   return pref.save(&s);
 }
 static const uint32_t HW_MODE_TYPE = 0x68776D6FUL;  // keep: runtime mode survives OTA
@@ -128,19 +144,18 @@ static void parse_opts(const char *opts, std::vector<int32_t> *raws, std::vector
 }
 void HeatWhisperComponent::create_entities() {
   static const uint16_t TITLES_N = sizeof(HW_TITLES) / sizeof(HwTitle);  // no HW_TITLES_N in catalog.h
-  uint16_t addrs[HW_MAX_SELECTION];
   uint16_t n = 0;
   HeatWhisperSelection sel{};
   if (load_selection(&sel)) {
     n = sel.count;
-    if (n) memcpy(addrs, sel.addrs, n * sizeof(uint16_t));
   } else {
     n = std::min(HW_DEFAULTS_N, HW_MAX_SELECTION);
-    memcpy(addrs, HW_DEFAULTS, n * sizeof(uint16_t));
+    sel.set_ro_mask(0);
+    memcpy(sel.addrs, HW_DEFAULTS, n * sizeof(uint16_t));
   }
   std::vector<uint32_t> used_hashes;  // catalog titles collide across models; skip dupes
   for (uint16_t i = 0; i < n; i++) {
-    uint16_t addr = addrs[i];
+    uint16_t addr = sel.addrs[i];
     const HwMeta *meta = meta_for(addr);
     if (meta == nullptr) { ESP_LOGW("heatwhisper", "Skipping unknown register %u (map updated after save?)", addr); continue; }
     const char *title = base_name_for(addr);  // post-Task-5 name authority; catalog title otherwise
@@ -156,7 +171,8 @@ void HeatWhisperComponent::create_entities() {
       if (h == hash) { dupe = true; break; }
     if (dupe) { ESP_LOGW("heatwhisper", "Skipping register %u with duplicate object id", addr); continue; }
     const HwHint *hint = hint_for(addr);
-    uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
+    int8_t hkind = (hint != nullptr) ? (int8_t) hint->kind : -1;
+    uint8_t kind = safety::resolve_kind(addr, meta->rw, hkind, sel.is_ro(i));
     if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     if (kind == 0) {
       auto *sen = new HeatWhisperSensor();
@@ -179,11 +195,17 @@ void HeatWhisperComponent::create_entities() {
       add_sensor(sen);
     } else if (kind == 1) {
       float f = meta->factor ? (float) meta->factor : 1.0f;
+      int32_t lo = 0, hi = 0;
+      safety::number_raw_bounds(meta->size, meta->min, meta->max, &lo, &hi);
+      if (meta->min == 0 && meta->max == 0) {
+        ESP_LOGW("heatwhisper", "Register %u writable without catalog min/max; using type bounds [%d..%d]",
+                 addr, (int) lo, (int) hi);
+      }
       auto *num = new HeatWhisperNumber();
       num->set_parent(this);
       num->set_register(addr);
-      num->traits.set_min_value((float) meta->min / f);
-      num->traits.set_max_value((float) meta->max / f);
+      num->traits.set_min_value((float) lo / f);
+      num->traits.set_max_value((float) hi / f);
       num->traits.set_step(1.0f / f);  // one raw LSB; no step info in catalog
       const HwStr *nstr = hw_str_for(addr);
       uint32_t nfields = nstr ? ((uint32_t) nstr->dc | ((uint32_t) nstr->uom << 8)) : 0;
@@ -613,13 +635,8 @@ void HeatWhisperNumber::control(float value) {
   float v = value;
   int32_t raw;
   const HwMeta *reg = meta_for(addr_);
-  if (reg != nullptr && reg->factor) {
-    raw = (int32_t) std::lround(v * reg->factor);
-    if (reg->min != 0 || reg->max != 0) {  // clamp to merged R/W range
-      if (raw < reg->min) raw = reg->min;
-      if (raw > reg->max) raw = reg->max;
-      v = (float) raw / reg->factor;
-    }
+  if (reg != nullptr) {
+    raw = safety::clamp_raw_from_float(value, reg->factor, reg->size, reg->min, reg->max, &v);
   } else {
     raw = (int32_t) std::lround(v);  // unknown register: factor 1
   }
@@ -632,7 +649,7 @@ void HeatWhisperNumber::control(float value) {
 // ponytail: dependency-free page; fetch JSON, render checkboxes, POST addrs CSV back.
 static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>HeatWhisper registers</title>
-<style>body{font-family:sans-serif;max-width:60em;margin:1em auto}li{list-style:none}.k{color:#888;font-size:.8em}</style>
+<style>body{font-family:sans-serif;max-width:64em;margin:1em auto;padding:0 .6em}li{list-style:none;padding:.18em 0}.k{color:#666;font-size:.82em}.b{display:inline-block;padding:.05em .35em;border-radius:3px;font-size:.75em;font-weight:600;margin-left:.3em;vertical-align:middle}.b0{background:#eef4ee;color:#2b6a2b}.b1{background:#e6f0ff;color:#1456a0}.b2{background:#fff3cd;color:#856404}.b3{background:#fde2e2;color:#a01414}.bu{border:1px solid #a01414;color:#a01414;background:#fff}.ro{margin-left:.6em;font-size:.85em;color:#444;white-space:nowrap}.rw-warn{color:#a01414;font-size:.8em;margin-left:.4em}#warn{display:none;background:#fff3cd;border-left:4px solid #d39e00;padding:.55em .75em;margin:.6em 0;font-size:.9em}#warn.hi{background:#fdeaea;border-left-color:#c62828}</style>
 </head><body><h1>HeatWhisper register picker</h1><p id="note"></p>
 <p>Pump model: <select id="nm"></select> <button id="nmgo">Set model</button> <button id="nmauto">Autodetect</button> <span id="nmmsg"></span></p>
 <div id="mbanner" style="background:#fff8e1;padding:.5em"></div>
@@ -641,13 +658,18 @@ static const char HW_PICKER_HTML[] = R"HTML(<!doctype html><html><head><meta cha
 <button id="mnibe">Back to NIBE</button> <span id="mmsg"></span></p></details>
 <p><span class="k">Pump menu 5.2: Modbus ON, all RMU systems OFF — the bridge emulates MODBUS40 (0x20).</span> <span id="rmumsg"></span></p>
 <p><button id="rst">Reset pump alarm (45171, NIBE only)</button> <span id="rstmsg"></span></p>
-<p><input id="q" placeholder="Filter&hellip;" size="30"> <label><input type="checkbox" id="eo"> enabled only</label>
+<p><input id="q" placeholder="Filter&hellip;" size="30">
+<select id="tf"><option value="-1">All tiers</option><option value="0">Read-only sensors</option><option value="1">Standard controls</option><option value="2">Advanced / installer</option><option value="3">High risk</option></select>
+<label><input type="checkbox" id="eo"> enabled only</label>
+<label><input type="checkbox" id="adv"> show advanced / installer &amp; high-risk</label>
 <span id="count"></span></p><ul id="list"></ul>
+<div id="warn"></div>
 <p><button id="save">Save selection</button> <span id="msg"></span></p>
 <script>
 const Q=document.getElementById('q'),E=document.getElementById('eo'),L=document.getElementById('list'),
 C=document.getElementById('count'),N=document.getElementById('note'),M=document.getElementById('msg'),
-S=document.getElementById('save');let regs=[];
+S=document.getElementById('save'),TF=document.getElementById('tf'),ADV=document.getElementById('adv'),
+W=document.getElementById('warn');let regs=[];
 const MM=document.getElementById('mm'),MG=document.getElementById('mgo'),
 MN=document.getElementById('mnibe'),GM=document.getElementById('mmsg'),
 DET=document.getElementById('mdet'),BAN=document.getElementById('mbanner');
@@ -655,13 +677,61 @@ const RN=document.getElementById('rmumsg');
 const NM=document.getElementById('nm'),NMG=document.getElementById('nmgo'),
 NMA=document.getElementById('nmauto'),NMM=document.getElementById('nmmsg'),
 RST=document.getElementById('rst'),RSTM=document.getElementById('rstmsg');
+const TL=['Read-only','Control','Installer','High Risk'];
 function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-function sync(){for(const c of L.querySelectorAll('input')){const r=regs.find(x=>String(x.a)===c.dataset.a);if(r)r.en=c.checked;}}
-function render(){sync();const q=Q.value.toLowerCase(),eo=E.checked;let n=0;
-L.innerHTML=regs.filter(r=>(!eo||r.en)&&(!q||r.t.toLowerCase().includes(q)||String(r.a).includes(q)))
-.map(r=>{n++;return '<li><label><input type="checkbox" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+
-' <span class="k">'+r.u+' '+r.kind+'</span></label></li>'}).join('');C.textContent=n+'/'+regs.length+' shown';}
-fetch('?format=json').then(r=>r.json()).then(j=>{regs=j.addrs;
+function sync(){
+  for(const c of L.querySelectorAll('input.enc')){
+    const r=regs.find(x=>String(x.a)===c.dataset.a);
+    if(r){const was=r.en;r.en=c.checked;if(!was&&r.en&&r.tier>0)r.ro=!!r.uncl;}
+  }
+  for(const c of L.querySelectorAll('input.roc')){
+    const r=regs.find(x=>String(x.a)===c.dataset.a);
+    if(r&&r.tier>0)r.ro=c.checked;
+  }
+}
+function updateWarn(){
+  const w=regs.filter(r=>r.en&&r.tier>0&&!r.ro);
+  const hr=w.filter(r=>r.tier===3),un=w.filter(r=>r.uncl),ad=w.filter(r=>r.tier===2&&!r.uncl);
+  if(!hr.length&&!un.length&&!ad.length){W.style.display='none';W.textContent='';W.className='';return;}
+  W.style.display='block';
+  W.className=(hr.length||un.length)?'hi':'';
+  const p=[];
+  if(hr.length)p.push(hr.length+' High Risk');
+  if(un.length)p.push(un.length+' No-range (unclamped)');
+  if(ad.length)p.push(ad.length+' Installer');
+  W.textContent='Writable risk notice: '+p.join(', ')+' enabled as writable. Misuse can damage the heat pump or heating system. Check "Read-only (sensor)" on any row to monitor safely without write access.';
+}
+function render(){
+  sync();
+  const act=document.activeElement;
+  const ak=(act&&act.closest&&act.closest('#list')&&act.dataset&&act.dataset.a)?[act.className,act.dataset.a]:null;
+  const qt=Q.value.trim(),q=qt.toLowerCase(),eo=E.checked,adv=ADV.checked,tf=Number(TF.value);
+  const exact=/^\d{4,5}$/.test(qt);
+  let n=0,enN=0,hid=0;
+  const rows=[];
+  for(const r of regs){
+    if(r.en)enN++;
+    const isAdv=r.tier>=2;
+    const exactAddr=exact&&String(r.a)===qt;
+    if(isAdv&&!adv&&!r.en&&!exactAddr)hid++;
+    if(eo&&!r.en)continue;
+    if(!adv&&isAdv&&!r.en&&!exactAddr)continue;
+    if(tf>=0&&r.tier!==tf)continue;
+    if(q&&!r.t.toLowerCase().includes(q)&&!String(r.a).includes(q))continue;
+    n++;
+    const effKind=(r.tier===0||r.ro)?'sensor':r.kind;
+    const bu=r.uncl?' <span class="b bu">No range</span>':'';
+    const roCtl=(r.en&&r.tier>0)?' <label class="ro"><input type="checkbox" class="roc" data-a="'+r.a+'"'+(r.ro?' checked':'')+'> Read-only (sensor)</label>'+(r.uncl&&!r.ro?'<span class="rw-warn">(writable: no catalog range, uses integer bounds)</span>':''):'';
+    rows.push('<li><label><input type="checkbox" class="enc" data-a="'+r.a+'"'+(r.en?' checked':'')+'> '+r.a+' '+esc(r.t)+' <span class="k">'+esc(r.u)+' '+effKind+'</span><span class="b b'+r.tier+'">'+TL[r.tier]+'</span>'+bu+'</label>'+roCtl+'</li>');
+  }
+  L.innerHTML=rows.join('');
+  if(ak){const el=L.querySelector('input.'+ak[0]+'[data-a="'+ak[1]+'"]');if(el)el.focus();}
+  C.textContent=enN+'/50 selected \u00b7 '+n+'/'+regs.length+' shown'+(!adv&&hid?' ('+hid+' installer/high-risk hidden)':'');
+  updateWarn();
+}
+function fmtList(arr){const m=arr.slice(0,12).map(r=>'  - '+r.a+' '+r.t);if(arr.length>12)m.push('  ...and '+(arr.length-12)+' more');return m.join('\n');}
+fetch('?format=json').then(r=>r.json()).then(j=>{
+regs=(j.addrs||[]).map(r=>Object.assign({},r,{en:!!r.en,ro:!!r.ro,uncl:!!r.uncl}));
 N.textContent=j.model==null?'Waiting for pump announcement — showing defaults.':'Model: '+j.model+' ('+(j.proto||'nibe')+')';
 if(NM){NM.innerHTML=(j.models||[]).map(m=>'<option'+(m.m===(j.model||'F750')?' selected':'')+'>'+esc(m.m)+'</option>').join('');
 NMG.onclick=()=>mpost('mode=nibe&model='+encodeURIComponent(NM.value),'Saved model. Reboot via ESPHome restart to apply.');
@@ -674,12 +744,25 @@ BAN.textContent='No NIBE pump detected yet — on Modbus-RTU (or MODBUS40 access
 else BAN.textContent='';
 RN.textContent=j.modbus40_seen==1||j.modbus40_seen=='1'?'Pump is polling MODBUS40 (0x20) — reads/writes live.':'Pump has not polled 0x20 yet — enable Modbus in 5.2 (keep RMU OFF), then reboot.';
 render();});
-S.onclick=()=>{sync();const a=regs.filter(r=>r.en).map(r=>r.a).join(',');
+S.onclick=()=>{sync();const sel=regs.filter(r=>r.en);
+if(sel.length>50){M.textContent='Too many registers selected ('+sel.length+'/50 max).';return;}
+const wr=sel.filter(r=>r.tier>0&&!r.ro),hr=wr.filter(r=>r.tier===3),un=wr.filter(r=>r.uncl),ad=wr.filter(r=>r.tier===2&&!r.uncl);
+if(hr.length||un.length||ad.length){
+  const parts=['You are enabling writable registers that can change heat pump settings:'];
+  if(hr.length)parts.push('\nHIGH RISK ('+hr.length+') — misuse can damage equipment, underfloor piping, or disable safety/Legionella/fuse limits:\n'+fmtList(hr));
+  if(un.length)parts.push('\nNO CATALOG RANGE ('+un.length+') — firmware falls back to raw integer type bounds:\n'+fmtList(un));
+  if(ad.length)parts.push('\nINSTALLER / ADVANCED ('+ad.length+') — verify against your pump manual:\n'+fmtList(ad));
+  parts.push('\nTip: tick "Read-only (sensor)" on any row to monitor safely without writes.\n\nProceed and save?');
+  if(!confirm(parts.join('\n')))return;
+}
+const a=sel.map(r=>r.a+(r.tier>0&&r.ro?':r':'')).join(',');
 fetch('/heatwhisper/registers/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:'addrs='+encodeURIComponent(a)}).then(async r=>{
 M.textContent=r.ok?'Saved. Reboot via ESPHome restart to apply.':'Save failed: '+await r.text()})
 .catch(e=>M.textContent='Save failed: '+e);};
-Q.oninput=render;E.onchange=render;
+Q.oninput=render;E.onchange=render;L.onchange=render;
+TF.onchange=()=>{if(Number(TF.value)>=2)ADV.checked=true;render();};
+ADV.onchange=()=>{if(!ADV.checked&&Number(TF.value)>=2)TF.value='-1';render();};
 function mpost(b,ok){fetch('/heatwhisper/registers/mode',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
 body:b}).then(async r=>{GM.textContent=r.ok?ok:'Save failed: '+await r.text()}).catch(e=>GM.textContent='Save failed: '+e);}
 MG.onclick=()=>mpost('mode=modbus&model='+encodeURIComponent(MM.value),
@@ -748,10 +831,11 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   HeatWhisperSelection sel{};
   const uint16_t *cur = HW_DEFAULTS;  // effective set mirrors create_entities: saved, else defaults
   uint16_t cn = HW_DEFAULTS_N;
-  if (this->parent_->load_selection(&sel)) { cur = sel.addrs; cn = sel.count; }
+  bool has_saved = this->parent_->load_selection(&sel);
+  if (has_saved) { cur = sel.addrs; cn = sel.count; }
   static const char *KINDS[] = {"sensor", "number", "switch", "select"};
   std::string o;
-  o.reserve((size_t) n * 64 + 256);
+  o.reserve((size_t) n * 88 + 512);
   o += "{\"model\":";
   if (have_model) {
     o += '"';
@@ -777,11 +861,20 @@ std::string HeatWhisperPickerHandler::list_json_() const {
       }
     if (title == nullptr) continue;
     const HwHint *hint = hint_for(addr);
-    uint8_t kind = (hint != nullptr) ? hint->kind : (uint8_t)(meta->rw ? 1 : 0);
+    int8_t hkind = (hint != nullptr) ? (int8_t) hint->kind : -1;
+    HwTier tier = safety::effective_tier(addr, meta->rw);
+    bool uncl = safety::is_unclamped(addr, meta->rw, meta->min, meta->max, hkind);
+    uint8_t kind = safety::resolve_kind(addr, meta->rw, hkind, false);
     if (addr < 20000 && kind != 0) kind = 0;  // 1xxxx range: queue_write drops writes, offer read-only
     bool en = false;
-    for (uint16_t c = 0; c < cn; c++)
-      if (cur[c] == addr) { en = true; break; }
+    bool ro = (tier == HW_TIER_RO) || uncl;
+    for (uint16_t c = 0; c < cn; c++) {
+      if (cur[c] == addr) {
+        en = true;
+        ro = (tier == HW_TIER_RO) || (has_saved && sel.is_ro(c));
+        break;
+      }
+    }
     if (!first) o += ',';
     first = false;
     snprintf(num, sizeof(num), "%u", addr);
@@ -795,6 +888,10 @@ std::string HeatWhisperPickerHandler::list_json_() const {
     o += KINDS[kind > 3 ? 0 : kind];
     o += "\",\"en\":";
     o += en ? '1' : '0';
+    o += ",\"tier\":";
+    o += (char)('0' + (uint8_t) tier);
+    if (ro) o += ",\"ro\":1";
+    if (uncl) o += ",\"uncl\":1";
     o += '}';
   }
   // ponytail: everything above is byte-identical to the Nibe path; union suffix only.
@@ -842,38 +939,38 @@ std::string HeatWhisperPickerHandler::list_json_() const {
   o += "]}";
   return o;
 }
+static bool picker_is_known_addr_(uint16_t addr) { return meta_for(addr) != nullptr; }
 void HeatWhisperPickerHandler::handle_save_(AsyncWebServerRequest *request) {
   std::string s = request->hasArg("addrs") ? request->arg("addrs").c_str() : std::string();
   uint16_t addrs[HW_MAX_SELECTION];
   uint16_t count = 0;
-  std::string err;
-  for (size_t i = 0; i <= s.size();) {
-    size_t j = s.find(',', i);
-    if (j == std::string::npos) j = s.size();
-    std::string tok = s.substr(i, j - i);
-    i = j + 1;
-    if (tok.empty()) continue;
-    char *end = nullptr;
-    long v = strtol(tok.c_str(), &end, 10);
-    if (end == tok.c_str() || *end != '\0' || v <= 0 || v > 65535) { err = "bad addr '" + tok + "'"; break; }
-    if (!meta_for((uint16_t) v)) { err = "unknown register " + tok; break; }
-    bool dupe = false;  // ponytail: repeats must not consume cap slots or persist twice
-    for (uint16_t k = 0; k < count; k++)
-      if (addrs[k] == (uint16_t) v) { dupe = true; break; }
-    if (dupe) continue;
-    if (count >= HW_MAX_SELECTION) {
-      char m[32];
-      snprintf(m, sizeof(m), "too many (max %u)", HW_MAX_SELECTION);
-      err = m;
-      break;
-    }
-    addrs[count++] = (uint16_t) v;
-  }
-  if (!err.empty()) {
-    request->send(400, "text/plain", err.c_str());
+  uint64_t ro_mask = 0;
+  std::string bad;
+  // parse_selection_csv handles dupe elimination before checking the HW_MAX_SELECTION cap.
+  auto err = safety::parse_selection_csv(s, picker_is_known_addr_, addrs, &ro_mask, &count, HW_MAX_SELECTION, &bad);
+  if (err == safety::SelectionParseError::BAD_TOKEN) {
+    std::string msg = "bad addr '" + bad + "'";
+    request->send(400, "text/plain", msg.c_str());
     return;
   }
-  if (!this->parent_->save_selection(addrs, count)) {
+  if (err == safety::SelectionParseError::UNKNOWN_ADDR) {
+    std::string msg = "unknown register " + bad;
+    request->send(400, "text/plain", msg.c_str());
+    return;
+  }
+  if (err == safety::SelectionParseError::TOO_MANY) {
+    char m[32];
+    snprintf(m, sizeof(m), "too many (max %u)", HW_MAX_SELECTION);
+    request->send(400, "text/plain", m);
+    return;
+  }
+  for (uint16_t k = 0; k < count; k++) {
+    const HwMeta *meta = meta_for(addrs[k]);
+    if (meta == nullptr || safety::effective_tier(addrs[k], meta->rw) == HW_TIER_RO) {
+      ro_mask &= ~(uint64_t{1} << k);
+    }
+  }
+  if (!this->parent_->save_selection(addrs, count, ro_mask)) {
     request->send(500, "text/plain", "save failed");
     return;
   }

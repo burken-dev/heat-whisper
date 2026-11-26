@@ -5,6 +5,88 @@ DEFAULT_ENABLED = [40004, 40008, 40012, 40013, 40014, 40033,
                    43005, 43009, 43084, 43086, 45001,
                    47011, 47041, 47370, 47371, 47387, 48132]
 
+# 2-bit safety tiers packed into HwMeta.rw (must match safety.h HwTier).
+TIER_RO = 0
+TIER_STANDARD = 1
+TIER_ADVANCED = 2
+TIER_HIGH_RISK = 3
+
+STANDARD_CONTROL_REGS = frozenset({
+    # Factory R/W defaults (all 7)
+    43005, 47011, 47041, 47370, 47371, 47387, 48132,
+    # Heating curves & offsets (S1-S4) + point offset + external adjustment
+    47004, 47005, 47006, 47007,
+    47008, 47009, 47010,
+    47027, 47028,
+    47029, 47030, 47031, 47032, 47033, 47034, 47035, 47036,
+    # Degree minutes (32-bit & cooling)
+    40940, 44266,
+    # Room sensor & climate mode thresholds
+    47372, 47374, 47375, 47376,
+    47391, 47392, 47393, 47394,
+    47395, 47396, 47397, 47398,
+    47399, 47400, 47401, 47402,
+    # Hot water comfort temperatures
+    47043, 47044, 47045, 47047, 47048, 47049,
+    48120, 48148,
+    # Ventilation / fan mode & night cooling
+    47260, 47271, 47272, 47273, 47274,
+    47537, 47538, 47539,
+    49358, 49359, 49360, 49361, 49362, 49363, 49364, 49365, 49366,
+    # Holiday, smart home room control, silent mode max speed
+    48043, 48976, 49282,
+    # S-series HW demand
+    40056,
+})
+
+HIGH_RISK_REGS = frozenset({
+    # Min/Max supply temperature limits (underfloor / pipe over-temp risk)
+    40034, 40036,
+    47012, 47013, 47014, 47015, 47016, 47017, 47018, 47019,
+    48495, 48496, 48497, 48498, 48499, 48500, 48501, 48502,
+    # Floor drying program (multi-day high-temp baking)
+    *range(47276, 47291),
+    # Compressor frequency limits, regulator, manual overrides & inverter init
+    *range(47092, 47106),
+    48567, 48568, 49227,
+    # Electrical safety: fuse size & max internal additive power
+    47212, 47214, 48914, 49225,
+    # Periodic HW / Legionella disinfection
+    40065, 40066, 47046, 47050, 47051,
+    # Operational modes, pump modes, manual pump speeds & brine freeze protection
+    40021, 40068, 40069, 42097, 44323,
+    47137, 47138, 47139,
+    47380, 47381, 47382, 47383, 48944,
+    47413, 47414, 47415, 47416, 47417, 47418,
+    48107, 48130, 48131, 48208,
+    48275, 48452, 48453, 48454, 48455, 48456, 48458, 48459, 48487, 48977,
+    49190, 49191, 49192, 49193,
+    *range(49243, 49253),
+    49289, 49290, 49291, 49292, 49293,
+    *range(49301, 49309),
+    # Defrost parameters (icing / freeze risk)
+    47294, 47295, 47296, 47299, 47313, 47473,
+    # Compressor & additive DM start/step thresholds
+    47206, 47208, 47209, 47210, 48072, 49228, 49229, 49294,
+    # Bus / accessory & alarm behavior config (can break MODBUS40 or disable alarm protection)
+    40196, 40197, 41020, 41031,
+    47365, 47366, 47367, 47368,
+    47388, 47389,
+    48852, 48889,
+})
+
+
+def register_tier(addr, mode):
+    """Classify a register into a fail-safe 2-bit tier (defaulting unknown R/W to Advanced)."""
+    if mode != "R/W":
+        return TIER_RO
+    a = int(addr)
+    if a in HIGH_RISK_REGS:
+        return TIER_HIGH_RISK
+    if a in STANDARD_CONTROL_REGS:
+        return TIER_STANDARD
+    return TIER_ADVANCED
+
 def _num(x):
     try:
         return int(x)
@@ -101,7 +183,7 @@ def generate_catalog_header(models, hints, transports=None, str_idx=None):
              "struct HwTransport { uint8_t model_idx; uint32_t baud; uint8_t parity; uint8_t addr; uint8_t write_fc; };"]
     entries = ",".join(
         f"{{{a},{_num(by_reg[str(a)].get('factor', 1))},"
-        f"{SIZE_CODES.get(by_reg[str(a)].get('size') or 's16', SIZE_CODES['s16'])},"        f"{1 if by_reg[str(a)].get('mode') == 'R/W' else 0},"
+        f"{SIZE_CODES.get(by_reg[str(a)].get('size') or 's16', SIZE_CODES['s16'])},"        f"{register_tier(a, by_reg[str(a)].get('mode'))},"
         f"{_num(by_reg[str(a)].get('min', 0))},{_num(by_reg[str(a)].get('max', 0))},"
         f"{_fc_of(by_reg[str(a)])},{_wo_of(by_reg[str(a)])}}}"
         for a in addrs)

@@ -11,6 +11,7 @@
 #include "esphome/core/application.h"
 #include "catalog.h"
 #include "nibe.h"
+#include "safety.h"
 #include "write_queue.h"
 #include <queue>
 #include <deque>
@@ -67,11 +68,7 @@ class HeatWhisperSwitch : public esphome::switch_::Switch, public esphome::Compo
   HeatWhisperComponent *parent_{nullptr};
   uint16_t addr_{0};
 };
-struct HeatWhisperSelection {
-  uint32_t version{1};
-  uint16_t count{0};
-  uint16_t addrs[50];
-};
+// HeatWhisperSelection + HeatWhisperSelectionV1 live in safety.h (with per-slot ro_mask).
 // Runtime Modbus override: YAML stays default nibe; picker saves {mode,model}
 // to flash, reboot applies it. mode 0=nibe, 1=modbus. model fits the longest
 // transports key ("Mitsubishi_Ecodan", 17) + NUL.
@@ -84,11 +81,7 @@ static_assert(sizeof(HeatWhisperMode{}) == 32, "HeatWhisperMode layout");
 
 // NIBE-bus slave address: we emulate a MODBUS40 accessory (fixed 0x20).
 static constexpr uint8_t kModbus40Addr = 0x20;
-// ponytail: brief said 4+2+2*50=106, but alignment pads the struct to 108
-// (verified with host g++); NVS save/load use sizeof consistently so the
-// trailing pad bytes are harmless.
-static_assert(sizeof(HeatWhisperSelection{}) == 108, "HeatWhisperSelection layout");
-static_assert(50 == HW_MAX_SELECTION, "selection slots match catalog cap");
+static_assert(kMaxSelectionSlots == HW_MAX_SELECTION, "selection slots match catalog cap");
 class HeatWhisperComponent : public esphome::Component, public esphome::uart::UARTDevice {
   public:
   void set_protocol_is_modbus(bool m) { modbus_ = m; }
@@ -117,7 +110,7 @@ class HeatWhisperComponent : public esphome::Component, public esphome::uart::UA
   void add_select(HeatWhisperSelect *s) { selects_.push_back(s); ensure_polled(s->get_register()); }
   void add_switch(HeatWhisperSwitch *s) { switches_.push_back(s); ensure_polled(s->get_register()); }
   bool load_selection(HeatWhisperSelection *out);
-  bool save_selection(const uint16_t *addrs, uint16_t n);
+  bool save_selection(const uint16_t *addrs, uint16_t n, uint64_t ro_mask = 0);
   bool load_mode(HeatWhisperMode *out);
   bool save_mode(uint8_t mode, const char *model);
   bool modbus40_seen() const { return modbus40_seen_; }
