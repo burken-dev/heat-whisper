@@ -10,7 +10,7 @@ The project is based on ESPHome and emulates Nibe's own Modbus 40-unit by commun
 
 HeatWhisper is a zero-logic local bridge designed to plug directly into external energy optimizers and smart home platforms:
 
-- **Home Assistant** — Native ESPHome API with zero-config discovery and unified `heat-whisper` / `HeatWhisper` naming across all boards.
+- **Home Assistant** — Native ESPHome API with zero-config discovery.
 - **EnergyWizard** — Ready out of the box with the 17 default entities (set `curve_offset: number.heatwhisper_heat_offset_s1`, plus outdoor, supply, return, room, and hot-water sensors).
 - **EffektGuard** — Works directly against the default outdoor, supply, return, room, degree-minute, electrical-addition, priority, and offset entities.
 - **EMHASS** — Expose temperature/power sensors and automate heat offset, hot water comfort mode, or additive heating schedules.
@@ -25,20 +25,18 @@ You can support the project by:
 
 # Supported boards
 
-Boards: ESP32 (`heatwhisper_esp32.yaml`), ESP32-S3 RS485-CAN (`heatwhisper_esp32_s3_rs485.yaml`), and Raspberry Pi Pico W (`heatwhisper_pico_w.yaml`).
+Boards: ESP32-S3 RS485-CAN (`heatwhisper_esp32_s3_rs485.yaml`), ESP32 (`heatwhisper_esp32.yaml`), and Raspberry Pi Pico W (`heatwhisper_pico_w.yaml`).
 
-Recommended board is the Waveshare ESP32-S3 with RS485/CAN, it requires no soldering and is as close to plug n' play as you can get.
+Recommended board is the Waveshare ESP32-S3 with RS485/CAN, it requires no soldering and no addons and is as close to plug n' play as you can get. You get the device, connect it to a computer using USB, flash the board directly from the web and wire it as instructed below and you're all set!
 
-You can support the project by using an affiliate link:
-- https://link.amazon/B06WtBCo5 (without external antenna)
-- https://link.amazon/B09Kg52Ee (with external antenna)
+You can support the project by using an affiliate link to purchase your esp-board:
+- https://link.amazon/B0dxQyUfV (Recommended Waveshare ESP32-S3 With RS485)
 
 *As an Amazon Associate, I earn from qualifying purchases*
 
-Or go to Amazon/AliExpress or any other place where you can find ESP32 boards. Below is a non-affiliate link to Amazon:
-- https://amzn.eu/d/0draNz1M
+Or go to Amazon/AliExpress or any other place where you can find ESP32 boards and look for "waveshare esp32-s3 rs485".
 
-For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a HAT for handling 12V to board input voltage.
+For other ESP32-boards or Raspberry pi pico W you need to get a RS485 HAT as well as a converter for handling 12V to board input voltage.
 
 ## Supported heat pumps
 
@@ -55,11 +53,16 @@ Auto-detected from the pump's announcement frame — no model setting needed. If
 Register maps live in `components/heatwhisper/models/*.json` (All NIBE models above, other files are there as a reference for now).
 
 ## What you need
-
-- ESP32, ESP32-S3, or Raspberry Pi Pico W (see recommended board above)
-- RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1) (Only if you don't have the recommended board)
+Prerequisites
 - NIBE pump with a free RS485 port
-- Home Assistant with the ESPHome integration or other smart home system that can communicate with ESPHome or over MQTT.
+- Home Assistant (or other smart home system that works with ESPHome or has MQTT-support)
+
+Hardware
+- [Waveshare ESP32-S3 with RS485](https://link.amazon/B0dxQyUfV) (affiliate link) - This device includes everything you need!
+OR
+- ESP32, ESP32-S3, or Raspberry Pi Pico W
+- RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1)
+- Voltage converter 12v -> board input voltage
 
 | Board | TX | RX | Flashing |
 |---|---|---|---|
@@ -73,26 +76,35 @@ Optional `flow_control_pin` under `heatwhisper:` (e.g. GPIO18) for DIY transceiv
 
 ### 1. Flash from the browser
 
-Go to the GitHub Pages flasher [Stable](https://burken-dev.github.io/heat-whisper/) or [Beta](https://burken-dev.github.io/heat-whisper/beta/), plug the board in over USB, click "Connect". The manifest picks ESP32 vs ESP32-S3 automatically. After flashing, click **Configure Wi-Fi** (Improv over USB). Skipped it? Join the fallback AP `HeatWhisper` (password `heatwhisper01`) and pick your network in the captive portal.
+Go to the GitHub Pages flasher [Stable](https://burken-dev.github.io/heat-whisper/) or [Beta](https://burken-dev.github.io/heat-whisper/beta/), connect to the board using USB and click "Connect". The manifest picks ESP32 vs ESP32-S3 automatically. After flashing, click **Configure Wi-Fi** (Improv over USB). Skipped it? Join the fallback AP `HeatWhisper` (password `heatwhisper01`) and pick your network in the captive portal.
 
 Local build instead: `esphome run heatwhisper_esp32_s3_rs485.yaml` (or `heatwhisper_esp32.yaml`). No `secrets.yaml` needed — the factory image ships open (no API key, no OTA/web passwords) so HA can discover it. Add passwords after adoption (see Hardening).
 
 ### 2. Wire it up
 
-![Mounting instructions](docs/pics/install_instructions.png)
+![Wiring Waveshare ESP32-S3-RS485-CAN to NIBE F750 (AA3-X4)](docs/pics/wiring_esp32_s3_f750.png)
+
+With the recommended **Waveshare ESP32-S3-RS485-CAN**, installation is just **4 screw-terminal wires** — no soldering, no external RS485 transceiver, and no separate power supply (its 7–36 V input runs directly off the heat pump's 12 V bus):
+
+| NIBE F750 (`AA3-X4`) | Signal | Waveshare ESP32-S3-RS485-CAN |
+|---|---|---|
+| **Pin 12** | `+12V` | **`VCC` (`DC 7~36V`)** *(top right)* |
+| **Pin 9** | `GND` | **`GND` (`DC 7~36V`)** *(top, next to `VCC`)* |
+| **Pin 11** | `RS485 A` | **`A+` (`RS485`)** *(bottom right)* |
+| **Pin 10** | `RS485 B` | **`B-` (`RS485`)** *(bottom, next to `A+`)* |
+
+*(Leave CAN `H`/`L` unconnected. Unclip the case and move the onboard **RS485 `120R`** jumper to **ON** for a single-drop bus. Unplug USB-C after flashing.)*
 
 1. Turn off the heat pump.
-2. Remove the top cover (like when you're about to clean the filter)
-3. Look on the bottom of the heat pump and unscrew the two screws and then lift the front off the heat pump.
-4. Open the latch and connect the wires as seen in the picture above.
-5. Power on the heat pump and check that the Heat Whisper powers up
-6. Hold down the "back" button until the service menu appears. Go to 5.2 and activate "Modbus"
+2. Remove the top cover (like when you're about to clean the filter).
+3. Look on the bottom of the heat pump, unscrew the two screws, and lift the front cover off.
+4. Open the latch and connect the 4 wires to `AA3-X4` as shown in the diagram and table above.
+5. Power on the heat pump and check that HeatWhisper powers up.
+6. Hold down the "back" button until the service menu appears, go to **5.2**, and activate **MODBUS 40**.
 
-You can also check the Modbus 40 [installation-manual](https://assetstore.nibe.se/hcms/v2.4/entity/document/23567/storage/MDIzNTY3LzAvbWFzdGVy/download/Installat%C3%B6rshandbok_Tillbeh%C3%B6r_MODBUS%2040_031725-10.pdf) for how to connect it to different models.
+Using another NIBE model (`F1145`, `F1245`, `F1345`, `VVM`, etc.)? Check the MODBUS 40 [installation manual](https://assetstore.nibe.se/hcms/v2.4/entity/document/23567/storage/MDIzNTY3LzAvbWFzdGVy/download/Installat%C3%B6rshandbok_Tillbeh%C3%B6r_MODBUS%2040_031725-10.pdf) for your model's terminal block (`AA3-X4:9–12` on most F/VVM models; `X6` or `AA101-X10` on F1345/F1355).
 
-NB: The heat pump gives 12V so make sure your board can handle that input to power the board!
-
-Pump RS485 A/B → transceiver → MCU UART pins from the table above. Power the transceiver from the MCU (3.3 V or 5 V per module). Waveshare S3 RS485-CAN: onboard screw terminals, 120Ω jumper ON for a single-drop bus.
+**Using a DIY ESP32 or Pico W instead?** The heat pump supplies **12 V** on pin 12, so use a 12 V-to-5 V/3.3 V buck converter to power the board and wire pump RS485 A/B → external RS485 transceiver → MCU UART pins from the table above (power the transceiver at 3.3 V or 5 V per module).
 
 ### 3. Add it to Home Assistant
 
