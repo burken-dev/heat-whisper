@@ -59,7 +59,9 @@ Prerequisites
 
 Hardware
 - [Waveshare ESP32-S3 with RS485](https://link.amazon/B0dxQyUfV) (affiliate link) - This device includes everything you need!
+
 OR
+
 - ESP32, ESP32-S3, or Raspberry Pi Pico W
 - RS485-to-TTL transceiver (pump RS485 A/B → transceiver → MCU UART, 9600 8N1)
 - Voltage converter 12v -> board input voltage
